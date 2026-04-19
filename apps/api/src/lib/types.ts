@@ -60,10 +60,11 @@ export interface ResolveResponse {
 }
 
 export interface SearchResult {
+  id: string
   city: string
   state: string
   displayName: string
-  latestFiscalYearLabel: string
+  fiscalYearLabel: string
   updatedAt: string
 }
 

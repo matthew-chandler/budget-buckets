@@ -28,11 +28,12 @@ interface ReportRow {
   updated_at: string
 }
 
-interface CitySearchRow {
+export interface ArchiveSearchRow {
+  id: string
   city: string
   state: string
   displayName: string
-  latestFiscalYearLabel: string
+  fiscalYearLabel: string
   updatedAt: string
 }
 
@@ -249,32 +250,36 @@ export async function listBudgetReportsForCity(
   return rows.map(rowToReport)
 }
 
-export async function searchCities(query: string): Promise<CitySearchRow[]> {
-  const normalized = `%${query.trim()}%`
-  const rows = db.prepare(`
-    SELECT *
+export async function searchCities(query: string): Promise<ArchiveSearchRow[]> {
+  const q = query.trim()
+  const pattern = q ? `%${q}%` : '%'
+  const rows = db
+    .prepare(
+      `
+    SELECT id, city, state, display_name, fiscal_year_label, updated_at
     FROM budget_reports
-    WHERE display_name LIKE ? COLLATE NOCASE
+    WHERE length(trim(?)) = 0 OR display_name LIKE ? COLLATE NOCASE
     ORDER BY updated_at DESC
-    LIMIT 25
-  `).all(normalized) as unknown as ReportRow[]
+    LIMIT 50
+  `,
+    )
+    .all(q, pattern) as {
+      id: string
+      city: string
+      state: string
+      display_name: string
+      fiscal_year_label: string
+      updated_at: string
+    }[]
 
-  const deduped = new Map<string, CitySearchRow>()
-
-  for (const row of rows) {
-    const key = `${row.city_slug}:${row.state_slug}`
-    if (!deduped.has(key)) {
-      deduped.set(key, {
-        city: row.city,
-        state: row.state,
-        displayName: row.display_name,
-        latestFiscalYearLabel: row.fiscal_year_label,
-        updatedAt: row.updated_at,
-      })
-    }
-  }
-
-  return [...deduped.values()].slice(0, 10)
+  return rows.map((row) => ({
+    id: row.id,
+    city: row.city,
+    state: row.state,
+    displayName: row.display_name,
+    fiscalYearLabel: row.fiscal_year_label,
+    updatedAt: row.updated_at,
+  }))
 }
 
 export function citationsForReport(report: BudgetReport): Citation[] {

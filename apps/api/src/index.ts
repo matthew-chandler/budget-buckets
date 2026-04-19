@@ -67,7 +67,7 @@ app.post('/api/reports/resolve', zValidator('json', resolveSchema), async (c) =>
   return c.json(await resolveBudgetReport(body))
 })
 
-const MAX_PDF_BYTES = 25 * 1024 * 1024
+const MAX_PDF_BYTES = 100 * 1024 * 1024
 
 app.post('/api/reports/upload-pdf', async (c) => {
   const body = await c.req.parseBody()

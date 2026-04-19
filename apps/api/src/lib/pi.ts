@@ -10,7 +10,11 @@ import {
   SessionManager,
 } from '@mariozechner/pi-coding-agent'
 import { Type } from '@sinclair/typebox'
-import { readDocument } from './document-reader.js'
+import {
+  extractPdfTextPageRange,
+  readDocument,
+  readPdfDocumentInfo,
+} from './document-reader.js'
 import type {
   BudgetReport,
   ChatResponse,
@@ -27,17 +31,18 @@ const PDF_UPLOAD_SYSTEM_PROMPT = `
 You are Budget Buckets' municipal budget analysis agent.
 
 Your job:
-1. Call the read_document tool exactly once on the absolute PDF file path provided in the user message.
-2. Use only that extracted text to bucket spending into the standardized buckets below.
+1. Call pdf_document_info on the absolute PDF path in the user message to learn page count and document metadata.
+2. Call pdf_extract_text one or more times on page ranges that contain the adopted budget figures you need (summary tables, functional/expenditure breakdowns, all-funds totals). Prefer targeted ranges over reading the entire document when the PDF is long.
+3. Use only text returned from those tools to bucket spending into the standardized buckets below.
 
 Hard rules:
-- Use read_document only on the path given in the user message. Do not browse the web or use any other source.
+- Use pdf_document_info and pdf_extract_text only with the pdfPath given in the user message. Do not browse the web or use any other source.
 - Do not inspect the environment, list directories, or run shell commands.
 - Never invent a number, citation, or category. Missing fields must be null or [].
 - Return JSON only. No markdown, no explanation, no code fences.
 - For citations tied to the uploaded PDF, set "url" to "user-upload" and describe the page, table, or section in "title" and "note".
 
-Stop once read_document has run and you can produce the JSON.
+Stop once you have enough extracted text to justify the JSON.
 `.trim()
 
 const SCRAPER_SYSTEM_PROMPT = `
@@ -104,6 +109,91 @@ const readDocumentTool = defineTool({
         source: result.source,
         title: result.title,
         contentType: result.contentType,
+        length: result.text.length,
+      },
+    }
+  },
+})
+
+const pdfDocumentInfoTool = defineTool({
+  name: 'pdf_document_info',
+  label: 'PDF document info',
+  description:
+    'Return page count and basic metadata for a local PDF file. Call this first on an uploaded budget PDF.',
+  promptSnippet:
+    'pdf_document_info(pdfPath) returns pageCount, title, and author from the PDF.',
+  promptGuidelines: [
+    'Always call pdf_document_info once before pdf_extract_text so you know how many pages exist.',
+    'Use only the pdfPath supplied in the user message.',
+  ],
+  parameters: Type.Object({
+    pdfPath: Type.String({
+      description: 'Absolute path to the PDF on the server (must match the path from the user message).',
+    }),
+  }) as any,
+  async execute(_toolCallId, params: any) {
+    const info = await readPdfDocumentInfo(String(params.pdfPath ?? '').trim())
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(info, null, 2),
+        },
+      ],
+      details: {
+        pageCount: info.pageCount,
+        title: info.title,
+      },
+    }
+  },
+})
+
+const pdfExtractTextTool = defineTool({
+  name: 'pdf_extract_text',
+  label: 'PDF extract text',
+  description:
+    'Extract text from an inclusive range of PDF pages (1-based page numbers). Use for budget tables and narrative sections.',
+  promptSnippet:
+    'pdf_extract_text(pdfPath, firstPage, lastPage, maxCharacters?) returns text with page markers.',
+  promptGuidelines: [
+    'Request only the page ranges you need; widen ranges if tables span pages.',
+    'If output was truncated, narrow the range or split into additional calls.',
+    'Use only the pdfPath supplied in the user message.',
+  ],
+  parameters: Type.Object({
+    pdfPath: Type.String({
+      description: 'Absolute path to the PDF on the server (must match the path from the user message).',
+    }),
+    firstPage: Type.Number({ description: 'First page to include (1-based).' }),
+    lastPage: Type.Number({ description: 'Last page to include (1-based, inclusive).' }),
+    maxCharacters: Type.Optional(
+      Type.Number({
+        description: 'Maximum characters of extracted text (default 20000).',
+      }),
+    ),
+  }) as any,
+  async execute(_toolCallId, params: any) {
+    const pdfPath = String(params.pdfPath ?? '').trim()
+    const firstPage = Math.max(1, Math.floor(Number(params.firstPage)))
+    const lastPage = Math.max(firstPage, Math.floor(Number(params.lastPage)))
+    const maxCharacters =
+      params.maxCharacters !== undefined ? Math.floor(Number(params.maxCharacters)) : 20_000
+
+    const result = await extractPdfTextPageRange(pdfPath, firstPage, lastPage, maxCharacters)
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+      details: {
+        firstPage: result.firstPage,
+        lastPage: result.lastPage,
+        pageCount: result.pageCount,
+        truncated: result.truncated,
         length: result.text.length,
       },
     }
@@ -241,6 +331,19 @@ function summarizeToolArgs(args: unknown) {
     return ` source=${JSON.stringify(source)}`
   }
 
+  const pdfPath =
+    'pdfPath' in args && typeof args.pdfPath === 'string' ? args.pdfPath : null
+  const firstPage = 'firstPage' in args && typeof args.firstPage === 'number' ? args.firstPage : null
+  const lastPage = 'lastPage' in args && typeof args.lastPage === 'number' ? args.lastPage : null
+
+  if (pdfPath && firstPage != null && lastPage != null) {
+    return ` pdfPath=${JSON.stringify(pdfPath)} pages=${firstPage}-${lastPage}`
+  }
+
+  if (pdfPath) {
+    return ` pdfPath=${JSON.stringify(pdfPath)}`
+  }
+
   return ''
 }
 
@@ -267,7 +370,7 @@ function attachSessionLogging(session: any, label: string) {
 async function createFireworksAgentSession(input: {
   cwd: string
   tools: any[]
-  customTools?: Array<typeof readDocumentTool | typeof browserCommandTool>
+  customTools?: any[]
 }) {
   if (!process.env.FIREWORKS_API_KEY) {
     throw new Error('FIREWORKS_API_KEY is not set, so the Pi scraper cannot use the required Fireworks router model.')
@@ -354,7 +457,7 @@ export async function scrapeBudgetFromUploadedPdfWithPi(input: {
     const result = await createFireworksAgentSession({
       cwd,
       tools: [],
-      customTools: [readDocumentTool],
+      customTools: [pdfDocumentInfoTool, pdfExtractTextTool],
     })
     agentDir = result.agentDir
     const { session, modelFallbackMessage } = result
@@ -406,7 +509,7 @@ Return this JSON shape exactly:
   ]
 }
 
-PDF file (call read_document on this absolute path only): ${input.pdfPath}
+PDF file (use these tools only with this absolute pdfPath): ${input.pdfPath}
 Original filename: ${input.fileName}
 City and state for this budget: ${input.city}, ${input.state}
 Fiscal year: ${input.fiscalYearLabel?.trim() ? input.fiscalYearLabel.trim() : 'infer from the document text if possible, otherwise null'}
@@ -425,9 +528,10 @@ Bucket keys:
 - miscellaneous
 
 Required workflow:
-1. Call read_document once with source="${input.pdfPath}".
-2. Extract only supported figures from the returned text.
-3. Return only JSON.
+1. Call pdf_document_info with pdfPath="${input.pdfPath}".
+2. Call pdf_extract_text with the same pdfPath for the page ranges that contain adopted budget totals and functional or departmental spending suitable for bucketing. Make additional calls if you need more sections.
+3. Extract only supported figures from the returned text.
+4. Return only JSON.
 `.trim()
 
     await session.prompt(prompt, { expandPromptTemplates: false })

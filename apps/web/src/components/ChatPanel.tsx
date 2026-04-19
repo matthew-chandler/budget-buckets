@@ -1,6 +1,8 @@
 import { type FormEvent } from 'react'
 import type { BudgetReport, ChatResponse } from '../lib/types'
 import { isHttpUrl } from '../lib/api'
+import { formatFiscalYearDisplay } from '../lib/fiscal-year'
+import { formatChatAnswerToNodes } from '../lib/format-chat-answer'
 import { SectionHeading } from './SectionHeading'
 
 const SUGGESTIONS = [
@@ -15,6 +17,7 @@ interface ChatPanelProps {
   question: string
   onQuestionChange: (v: string) => void
   onSubmit: () => void
+  onCancel: () => void
   isPending: boolean
   data: ChatResponse | undefined
   error: Error | null
@@ -25,6 +28,7 @@ export function ChatPanel({
   question,
   onQuestionChange,
   onSubmit,
+  onCancel,
   isPending,
   data,
   error,
@@ -33,6 +37,8 @@ export function ChatPanel({
     e.preventDefault()
     onSubmit()
   }
+
+  const fy = formatFiscalYearDisplay(activeReport.fiscalYearLabel)
 
   return (
     <section className="section">
@@ -58,10 +64,10 @@ export function ChatPanel({
             rows={3}
             value={question}
             onChange={(e) => onQuestionChange(e.target.value)}
-            placeholder={`Ask anything about ${activeReport.displayName}\u2019s ${activeReport.fiscalYearLabel} budget…`}
+            placeholder={`Ask anything about ${activeReport.displayName}\u2019s ${fy} budget…`}
           />
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <div className="chat-actions">
             <button
               className="btn"
               type="submit"
@@ -70,6 +76,11 @@ export function ChatPanel({
               {isPending && <span className="spinner" aria-hidden />}
               {isPending ? 'Thinking…' : 'Ask the agent'}
             </button>
+            {isPending ? (
+              <button type="button" className="btn btn--ghost" onClick={onCancel}>
+                Cancel
+              </button>
+            ) : null}
           </div>
         </form>
 
@@ -86,7 +97,7 @@ export function ChatPanel({
               “
             </div>
             <div className="chat-answer__body">
-              <p className="chat-answer__text">{data.answer}</p>
+              <p className="chat-answer__text">{formatChatAnswerToNodes(data.answer)}</p>
               {data.citations.length ? (
                 <div className="chat-answer__attribution">
                   Cited sources:{' '}

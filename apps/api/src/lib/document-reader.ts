@@ -40,6 +40,129 @@ function inferContentType(source: string, providedType: string | null): string {
   return 'text/html'
 }
 
+export interface PdfDocumentInfo {
+  pageCount: number
+  title: string | null
+  author: string | null
+}
+
+export interface PdfPageRangeExtract {
+  text: string
+  firstPage: number
+  lastPage: number
+  pageCount: number
+  truncated: boolean
+}
+
+async function runPypdfRpc(request: Record<string, unknown>): Promise<unknown> {
+  const script = `
+import json
+import sys
+from pypdf import PdfReader
+
+req = json.loads(sys.stdin.read())
+path = req["path"]
+op = req["op"]
+reader = PdfReader(path)
+
+def norm(v):
+    if v is None:
+        return None
+    s = str(v).strip()
+    return s if s else None
+
+if op == "info":
+    meta = reader.metadata
+    print(json.dumps({
+        "pageCount": len(reader.pages),
+        "title": norm(getattr(meta, "title", None) if meta else None),
+        "author": norm(getattr(meta, "author", None) if meta else None),
+    }))
+elif op == "pages":
+    n = len(reader.pages)
+    first = max(1, int(req.get("firstPage", 1)))
+    last = int(req.get("lastPage", max(n, 1)))
+    max_chars = int(req.get("maxCharacters", 20000))
+    if n == 0:
+        print(json.dumps({
+            "text": "",
+            "firstPage": first,
+            "lastPage": last,
+            "pageCount": 0,
+            "truncated": False,
+        }))
+    else:
+        last = min(max(last, first), n)
+        parts = []
+        for idx in range(first - 1, last):
+            t = reader.pages[idx].extract_text() or ""
+            parts.append("--- Page %d ---\\n%s" % (idx + 1, t))
+        text = "\\n\\n".join(parts).strip()
+        truncated = len(text) > max_chars
+        if truncated:
+            text = text[:max_chars] + "\\n\\n...[truncated]"
+        print(json.dumps({
+            "text": text,
+            "firstPage": first,
+            "lastPage": last,
+            "pageCount": n,
+            "truncated": truncated,
+        }))
+else:
+    raise SystemExit("unknown op: " + str(op))
+`.trim()
+
+  const child = spawn('python3', ['-c', script], {
+    stdio: ['pipe', 'pipe', 'pipe'],
+  })
+
+  const stdoutChunks: Buffer[] = []
+  const stderrChunks: Buffer[] = []
+
+  child.stdout.on('data', (chunk: Buffer) => stdoutChunks.push(chunk))
+  child.stderr.on('data', (chunk: Buffer) => stderrChunks.push(chunk))
+  child.stdin.end(JSON.stringify(request), 'utf8')
+
+  await new Promise<void>((resolve, reject) => {
+    child.on('error', reject)
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve()
+        return
+      }
+
+      reject(
+        new Error(
+          `PDF operation failed: ${Buffer.concat(stderrChunks).toString('utf8') || `exit code ${code}`}`,
+        ),
+      )
+    })
+  })
+
+  return JSON.parse(Buffer.concat(stdoutChunks).toString('utf8'))
+}
+
+/** Metadata and page count for a local PDF (uses pypdf on disk). */
+export async function readPdfDocumentInfo(pdfPath: string): Promise<PdfDocumentInfo> {
+  return (await runPypdfRpc({ op: 'info', path: pdfPath })) as PdfDocumentInfo
+}
+
+/** Extract text from inclusive 1-based page range. Large outputs are truncated to maxCharacters. */
+export async function extractPdfTextPageRange(
+  pdfPath: string,
+  firstPage: number,
+  lastPage: number,
+  maxCharacters = 20_000,
+): Promise<PdfPageRangeExtract> {
+  return (await runPypdfRpc({
+    op: 'pages',
+    path: pdfPath,
+    firstPage,
+    lastPage,
+    maxCharacters,
+  })) as PdfPageRangeExtract
+}
+
 async function extractPdfText(buffer: Buffer): Promise<string> {
   const script = `
 import json

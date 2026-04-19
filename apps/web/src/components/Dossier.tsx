@@ -1,5 +1,8 @@
 import type { BudgetReport } from '../lib/types'
-import { formatCurrency, formatNumber, perCapita } from '../lib/format'
+import type { DonutDenominator } from './BucketDonut'
+import { formatCurrency, formatNumber, formatPercent, perCapita } from '../lib/format'
+import { formatFiscalYearDisplay } from '../lib/fiscal-year'
+import { downloadTextFile, reportToCsvRows } from '../lib/csv-export'
 import { BucketDonut } from './BucketDonut'
 import { BucketGrid } from './BucketGrid'
 import { SourcesBlock } from './SourcesBlock'
@@ -8,14 +11,37 @@ import { SectionHeading } from './SectionHeading'
 interface DossierProps {
   report: BudgetReport
   fromCache: boolean
+  donutDenominator: DonutDenominator
+  onDonutDenominatorChange: (v: DonutDenominator) => void
 }
 
-export function Dossier({ report, fromCache }: DossierProps) {
+export function Dossier({
+  report,
+  fromCache,
+  donutDenominator,
+  onDonutDenominatorChange,
+}: DossierProps) {
   const status = fromCache ? 'From the archive' : 'Freshly filed'
   const perResident = perCapita(report.totalBudget, report.population)
   const topBucket = [...report.buckets]
     .filter((b) => (b.amount ?? 0) > 0)
     .sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0))[0]
+
+  const sumMapped = report.buckets.reduce((s, b) => s + (b.amount ?? 0), 0)
+  const total = report.totalBudget
+  const coverageRatio =
+    total && total > 0 && sumMapped >= 0 ? Math.min(1, sumMapped / total) : null
+  const gap =
+    total && total > 0 ? Math.max(0, total - sumMapped) : null
+
+  const fyDisplay = formatFiscalYearDisplay(report.fiscalYearLabel)
+
+  const exportCsv = () => {
+    const slug = `${report.city}-${report.state}-${report.fiscalYearLabel}`
+      .replace(/[^\w.-]+/g, '_')
+      .slice(0, 80)
+    downloadTextFile(`budget-buckets-${slug}.csv`, reportToCsvRows(report))
+  }
 
   return (
     <section className="dossier fade-in">
@@ -31,7 +57,7 @@ export function Dossier({ report, fromCache }: DossierProps) {
         </h1>
         <div className="dossier__dateline">
           <div>
-            <strong>{report.fiscalYearLabel}</strong>
+            <strong title={report.fiscalYearLabel}>{fyDisplay}</strong>
           </div>
           <div>Report ID · {report.id.slice(0, 8).toUpperCase()}</div>
           <div>Retrieved · {new Date(report.retrievedAt).toLocaleDateString()}</div>
@@ -77,8 +103,62 @@ export function Dossier({ report, fromCache }: DossierProps) {
         </div>
       </div>
 
+      {total && total > 0 ? (
+        <div className="coverage-banner">
+          <div>
+            <strong>Coverage</strong>{' '}
+            <span className="coverage-banner__nums">
+              {formatCurrency(sumMapped, true)} mapped of {formatCurrency(total, true)} adopted
+              {coverageRatio !== null ? ` (${formatPercent(coverageRatio)} of total)` : ''}
+            </span>
+          </div>
+          {gap !== null && gap > 0 ? (
+            <span className="coverage-banner__gap">
+              Unmapped: {formatCurrency(gap, true)} — shown as its own slice when using “adopted
+              total” mode.
+            </span>
+          ) : (
+            <span className="coverage-banner__gap">Bucket sums match the adopted total.</span>
+          )}
+        </div>
+      ) : null}
+
+      <div className="chart-toolbar">
+        <div className="chart-toolbar__group" role="group" aria-label="Donut percentage basis">
+          <span className="chart-toolbar__label">Ring shows</span>
+          <button
+            type="button"
+            className={`btn btn--sm ${donutDenominator === 'adopted' ? '' : 'btn--ghost'}`}
+            onClick={() => onDonutDenominatorChange('adopted')}
+          >
+            % of adopted total
+          </button>
+          <button
+            type="button"
+            className={`btn btn--sm ${donutDenominator === 'mapped' ? '' : 'btn--ghost'}`}
+            onClick={() => onDonutDenominatorChange('mapped')}
+          >
+            % of extracted buckets
+          </button>
+        </div>
+        <button type="button" className="btn btn--sm btn--ghost" onClick={exportCsv}>
+          Export CSV
+        </button>
+        <button
+          type="button"
+          className="btn btn--sm btn--ghost"
+          onClick={() => window.print()}
+        >
+          Print / save as PDF
+        </button>
+      </div>
+
       <div className="chart-lede">
-        <BucketDonut buckets={report.buckets} />
+        <BucketDonut
+          buckets={report.buckets}
+          totalBudget={report.totalBudget}
+          denominator={donutDenominator}
+        />
 
         <aside className="chart-sidenote">
           <div className="chart-sidenote__fig">Fig. 1 — Allocation by bucket</div>
@@ -90,12 +170,13 @@ export function Dossier({ report, fromCache }: DossierProps) {
                 <strong>{topBucket.label}</strong> leads the ledger at{' '}
                 <strong>{formatCurrency(topBucket.amount, true)}</strong>,
                 roughly <strong>{Math.round((topBucket.share ?? 0) * 100)}%</strong>{' '}
-                of the total.
+                of the adopted total.
               </>
             )}
           </p>
           <div className="chart-sidenote__citation">
-            Hover any slice for its exact share · Full breakdown below
+            Hover any slice for details · Switch “ring shows” if bucket totals do not sum to the
+            adopted figure
           </div>
         </aside>
       </div>

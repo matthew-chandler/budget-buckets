@@ -1,6 +1,7 @@
 import { type FormEvent } from 'react'
 import type { BudgetReport, HistoryResponse } from '../lib/types'
 import { formatCurrency, formatPercent } from '../lib/format'
+import { formatFiscalYearDisplay } from '../lib/fiscal-year'
 import { SectionHeading } from './SectionHeading'
 
 interface HistorySectionProps {
@@ -58,8 +59,8 @@ export function HistorySection({
                     : ''
                 return (
                   <div key={r.id} className="history-item">
-                    <span className="history-item__year">
-                      {r.fiscalYearLabel}
+                    <span className="history-item__year" title={r.fiscalYearLabel}>
+                      {formatFiscalYearDisplay(r.fiscalYearLabel)}
                     </span>
                     <span className="history-item__total">
                       {formatCurrency(r.totalBudget, true)}
@@ -221,7 +222,7 @@ function HistoryLineChart({ reports }: { reports: BudgetReport[] }) {
               textAnchor="middle"
               className="history-tick-label"
             >
-              {p.r.fiscalYearLabel}
+              {formatFiscalYearDisplay(p.r.fiscalYearLabel)}
             </text>
             <text
               x={p.x}

@@ -87,13 +87,22 @@ export interface ChatResponse {
 }
 
 export interface SearchResult {
+  id: string
   city: string
   state: string
   displayName: string
-  latestFiscalYearLabel: string
+  fiscalYearLabel: string
   updatedAt: string
 }
 
 export interface SearchResponse {
   results: SearchResult[]
+}
+
+/** One uploaded PDF and the city / state / year used as that report's identity. */
+export interface PdfUploadEntry {
+  file: File
+  city: string
+  state: string
+  fiscalYear: string
 }
