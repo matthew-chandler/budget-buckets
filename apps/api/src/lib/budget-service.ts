@@ -3,13 +3,24 @@ import { basename, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { bucketDefinitions, getBucketDefinition, normalizeBucketKey } from './buckets.js'
 import {
+  deleteReportTranslationsForReport,
   getBudgetReportByCityYear,
+  getBudgetReportById,
   getLatestBudgetReport,
+  getReportTranslationJson,
   listBudgetReportsForCity,
   searchCities,
+  type PersistedBudgetReport,
   upsertBudgetReport,
+  upsertReportTranslation,
 } from './db.js'
-import { answerBudgetQuestion, scrapeBudgetFromUploadedPdfWithPi, scrapeBudgetWithPi } from './pi.js'
+import {
+  answerBudgetQuestion,
+  scrapeBudgetFromUploadedPdfWithPi,
+  scrapeBudgetWithPi,
+  translateReportPayloadWithPi,
+} from './pi.js'
+import { applyReportTranslationPayload, type ReportTranslationPayload } from './report-translation.js'
 import type {
   BudgetReport,
   BucketAllocation,
@@ -233,6 +244,8 @@ export async function resolveBudgetReport(input: {
   })
 
   const report = await upsertBudgetReport(normalized)
+  deleteReportTranslationsForReport(report.id)
+  queueReportTranslations(report.id)
 
   return {
     report,
@@ -275,6 +288,8 @@ export async function resolveBudgetReportFromUploadedPdf(input: {
     })
 
     const report = await upsertBudgetReport(normalized)
+    deleteReportTranslationsForReport(report.id)
+    queueReportTranslations(report.id)
 
     return {
       report,
@@ -319,14 +334,86 @@ export async function searchKnownCities(query: string): Promise<SearchResult[]> 
   return searchCities(query)
 }
 
+function toClientReport(p: PersistedBudgetReport): BudgetReport {
+  const { citySlug: _cs, stateSlug: _ss, ...rest } = p
+  return rest
+}
+
+export async function getLocalizedBudgetReport(
+  reportId: string,
+  locale: 'en' | 'es' | 'zh',
+): Promise<BudgetReport> {
+  const base = await getBudgetReportById(reportId)
+  if (!base) {
+    throw new Error('Report not found.')
+  }
+  const canonical = toClientReport(base)
+  if (locale === 'en') {
+    return canonical
+  }
+
+  const cached = getReportTranslationJson(reportId, locale)
+  let payload: ReportTranslationPayload
+  if (cached) {
+    payload = JSON.parse(cached) as ReportTranslationPayload
+  } else {
+    payload = await translateReportPayloadWithPi(canonical, locale)
+    upsertReportTranslation(reportId, locale, JSON.stringify(payload))
+  }
+  return applyReportTranslationPayload(canonical, payload)
+}
+
+export function queueReportTranslations(reportId: string): void {
+  void (async () => {
+    try {
+      const base = await getBudgetReportById(reportId)
+      if (!base) return
+      const canonical = toClientReport(base)
+      for (const loc of ['es', 'zh'] as const) {
+        if (getReportTranslationJson(reportId, loc)) continue
+        const payload = await translateReportPayloadWithPi(canonical, loc)
+        upsertReportTranslation(reportId, loc, JSON.stringify(payload))
+      }
+    } catch (err) {
+      console.error('[queueReportTranslations]', reportId, err)
+    }
+  })()
+}
+
+function assertReportSnapshotMatches(
+  report: BudgetReport,
+  city: string,
+  state: string,
+  fiscalYear: string | null | undefined,
+) {
+  if (
+    normalizeCity(report.city) !== normalizeCity(city) ||
+    normalizeState(report.state) !== normalizeState(state)
+  ) {
+    throw new Error('Report snapshot does not match the requested city and state.')
+  }
+  const fy = fiscalYear?.trim() ?? ''
+  if (fy && report.fiscalYearLabel.trim() !== fy) {
+    throw new Error('Report snapshot does not match the requested fiscal year.')
+  }
+}
+
 export async function chatAboutBudget(input: {
   city: string
   state: string
   fiscalYear?: string | null
   question: string
+  language?: 'en' | 'es' | 'zh'
+  reportSnapshot?: BudgetReport | null
 }): Promise<ChatResponse> {
-  const { report } = await resolveBudgetReport(input)
-  return answerBudgetQuestion(report, input.question)
+  let report: BudgetReport
+  if (input.reportSnapshot) {
+    assertReportSnapshotMatches(input.reportSnapshot, input.city, input.state, input.fiscalYear)
+    report = input.reportSnapshot
+  } else {
+    report = (await resolveBudgetReport(input)).report
+  }
+  return answerBudgetQuestion(report, input.question, input.language ?? 'en')
 }
 
 export { bucketDefinitions, getBucketDefinition }

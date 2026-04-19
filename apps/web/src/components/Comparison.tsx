@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { bucketLabel } from '../i18n/buckets'
+import { useI18n } from '../i18n/I18nProvider'
+import { formatStr } from '../i18n/strings'
+import type { AppLocale } from '../i18n/types'
 import type { BudgetReport, CompareResponse, SearchResult } from '../lib/types'
-import { cssVars, formatCurrency, formatPercent } from '../lib/format'
+import { useTranslatedReport } from '../lib/useTranslatedReport'
+import { cssVars } from '../lib/format'
 import { formatFiscalYearDisplay } from '../lib/fiscal-year'
 import { compareToCsv, downloadTextFile } from '../lib/csv-export'
 import { SectionHeading } from './SectionHeading'
@@ -42,6 +47,19 @@ export function Comparison({
   perCapitaMode,
   onPerCapitaModeChange,
 }: ComparisonProps) {
+  const { locale, t } = useI18n()
+
+  const trPrimary = useTranslatedReport(data?.primary ?? null)
+  const trSecondary = useTranslatedReport(data?.secondary ?? null)
+  const localizedCompareData = useMemo((): CompareResponse | null => {
+    if (!data) return null
+    return {
+      ...data,
+      primary: trPrimary.displayReport!,
+      secondary: trSecondary.displayReport!,
+    }
+  }, [data, trPrimary.displayReport, trSecondary.displayReport])
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
     onSubmit()
@@ -76,21 +94,24 @@ export function Comparison({
   }, [compareCity, compareState, compareYear, others])
 
   const exportCompare = () => {
-    if (!data) return
-    const slug = `compare-${data.primary.city}-${data.secondary.city}`
+    if (!localizedCompareData) return
+    const slug = `compare-${localizedCompareData.primary.city}-${localizedCompareData.secondary.city}`
       .replace(/[^\w.-]+/g, '_')
       .slice(0, 80)
-    downloadTextFile(`budget-buckets-${slug}.csv`, compareToCsv(data.primary, data.secondary))
+    downloadTextFile(
+      `budget-buckets-${slug}.csv`,
+      compareToCsv(localizedCompareData.primary, localizedCompareData.secondary),
+    )
   }
 
   return (
     <section className="section">
-      <SectionHeading num="03" eyebrow="City vs City" title="Line them up, side by side" />
+      <SectionHeading num="03" eyebrow={t('compareEyebrow')} title={t('compareTitle')} />
 
       <div className="compare-shell">
         <form className="compare-form" onSubmit={handleSubmit}>
           <div className="field field--full">
-            <label htmlFor="cmp-preset">Compare with an archived budget</label>
+            <label htmlFor="cmp-preset">{t('comparePresetLabel')}</label>
             <select
               id="cmp-preset"
               className="compare-select"
@@ -106,7 +127,7 @@ export function Comparison({
                 }
               }}
             >
-              <option value="">— Type a city manually below —</option>
+              <option value="">{t('archivePresetManual')}</option>
               {others.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.displayName} · {formatFiscalYearDisplay(o.fiscalYearLabel)}
@@ -117,7 +138,7 @@ export function Comparison({
 
           <div className="field-row compare-form__manual">
             <div className="field">
-              <label htmlFor="cmp-city">Compare against</label>
+              <label htmlFor="cmp-city">{t('compareAgainst')}</label>
               <input
                 id="cmp-city"
                 value={compareCity}
@@ -125,11 +146,11 @@ export function Comparison({
                   setPresetId('')
                   onCompareCityChange(e.target.value)
                 }}
-                placeholder="City name"
+                placeholder={t('phCompareCity')}
               />
             </div>
             <div className="field">
-              <label htmlFor="cmp-state">State</label>
+              <label htmlFor="cmp-state">{t('labelState')}</label>
               <input
                 id="cmp-state"
                 value={compareState}
@@ -137,11 +158,11 @@ export function Comparison({
                   setPresetId('')
                   onCompareStateChange(e.target.value)
                 }}
-                placeholder="CA"
+                placeholder={t('phState')}
               />
             </div>
             <div className="field">
-              <label htmlFor="cmp-year">FY</label>
+              <label htmlFor="cmp-year">{t('compareFY')}</label>
               <input
                 id="cmp-year"
                 value={compareYear}
@@ -149,7 +170,7 @@ export function Comparison({
                   setPresetId('')
                   onCompareYearChange(e.target.value)
                 }}
-                placeholder="optional — latest if empty"
+                placeholder={t('phCompareFY')}
               />
             </div>
           </div>
@@ -161,29 +182,29 @@ export function Comparison({
                 checked={perCapitaMode}
                 onChange={(e) => onPerCapitaModeChange(e.target.checked)}
               />
-              <span>Show dollars per resident (bars use per-capita scale)</span>
+              <span>{t('comparePerCapita')}</span>
             </label>
           </div>
 
           <div className="compare-actions">
             <button className="btn" type="submit" disabled={isPending || !compareCity.trim()}>
               {isPending && <span className="spinner" aria-hidden />}
-              {isPending ? 'Comparing…' : 'Run comparison'}
+              {isPending ? t('btnComparing') : t('btnRunComparison')}
             </button>
             {isPending ? (
               <>
                 <span className="compare-elapsed" aria-live="polite">
                   {elapsedSec}s
-                  <span className="compare-elapsed__hint"> (times out at 120s)</span>
+                  <span className="compare-elapsed__hint">{t('compareTimeoutHint')}</span>
                 </span>
                 <button type="button" className="btn btn--ghost" onClick={onCancel}>
-                  Cancel
+                  {t('btnCancel')}
                 </button>
               </>
             ) : null}
-            {data ? (
+            {localizedCompareData ? (
               <button type="button" className="btn btn--ghost" onClick={exportCompare}>
-                Export comparison CSV
+                {t('btnExportCompare')}
               </button>
             ) : null}
           </div>
@@ -191,18 +212,29 @@ export function Comparison({
 
         {error ? (
           <div className="alert">
-            <strong>Couldn't fetch that comparison.</strong>
+            <strong>{t('errCompare')}</strong>
             <p>{error.message}</p>
           </div>
         ) : null}
 
-        {data ? (
-          <ComparisonTable data={data} perCapitaMode={perCapitaMode} />
+        {localizedCompareData && (trPrimary.isTranslating || trSecondary.isTranslating) ? (
+          <p className="form-footer__note" style={{ marginTop: 12 }}>
+            {t('hintTranslatingContent')}
+          </p>
+        ) : null}
+
+        {localizedCompareData ? (
+          <ComparisonTable
+            data={localizedCompareData}
+            perCapitaMode={perCapitaMode}
+            locale={locale}
+          />
         ) : (
           <p className="chat-placeholder">
-            Pick another city to see every bucket stacked against{' '}
-            <strong>{activeReport.displayName}</strong> ({formatFiscalYearDisplay(activeReport.fiscalYearLabel)}).
-            Use the archive menu to avoid long live scrapes.
+            {formatStr(t('comparePlaceholder'), {
+              name: activeReport.displayName,
+              fy: formatFiscalYearDisplay(activeReport.fiscalYearLabel),
+            })}
           </p>
         )}
       </div>
@@ -213,10 +245,13 @@ export function Comparison({
 function ComparisonTable({
   data,
   perCapitaMode,
+  locale,
 }: {
   data: CompareResponse
   perCapitaMode: boolean
+  locale: AppLocale
 }) {
+  const { t, formatCurrency, formatPercent } = useI18n()
   const { primary, secondary } = data
 
   const scaleAmt = (amt: number | null, pop: number | null) => {
@@ -236,24 +271,24 @@ function ComparisonTable({
     <div>
       <div className="compare-heads">
         <div className="compare-head">
-          <span className="compare-head__label">Primary</span>
+          <span className="compare-head__label">{t('compareHeadPrimary')}</span>
           <span className="compare-head__city">{primary.displayName}</span>
           <span className="compare-head__sub">
-            {formatFiscalYearDisplay(primary.fiscalYearLabel)} · Total{' '}
+            {formatFiscalYearDisplay(primary.fiscalYearLabel)} · {t('compareTotalWord')}{' '}
             {formatCurrency(primary.totalBudget, true)}
             {perCapitaMode && primary.population
-              ? ` · ${formatCurrency((primary.totalBudget ?? 0) / primary.population, false)}/person`
+              ? ` · ${formatCurrency((primary.totalBudget ?? 0) / primary.population, false)}${t('comparePerPerson')}`
               : ''}
           </span>
         </div>
         <div className="compare-head">
-          <span className="compare-head__label">Against</span>
+          <span className="compare-head__label">{t('compareHeadAgainst')}</span>
           <span className="compare-head__city">{secondary.displayName}</span>
           <span className="compare-head__sub">
-            {formatFiscalYearDisplay(secondary.fiscalYearLabel)} · Total{' '}
+            {formatFiscalYearDisplay(secondary.fiscalYearLabel)} · {t('compareTotalWord')}{' '}
             {formatCurrency(secondary.totalBudget, true)}
             {perCapitaMode && secondary.population
-              ? ` · ${formatCurrency((secondary.totalBudget ?? 0) / secondary.population, false)}/person`
+              ? ` · ${formatCurrency((secondary.totalBudget ?? 0) / secondary.population, false)}${t('comparePerPerson')}`
               : ''}
           </span>
         </div>
@@ -283,7 +318,7 @@ function ComparisonTable({
               <div className="compare-row__label">
                 <span className="compare-row__name">
                   <span className="compare-row__swatch" aria-hidden />
-                  {bucket.label}
+                  {bucketLabel(bucket.key, locale)}
                 </span>
               </div>
 
@@ -299,12 +334,12 @@ function ComparisonTable({
                 <span className="compare-bar__value">
                   {perCapitaMode
                     ? primary.population
-                      ? `${formatCurrency(aAmt / primary.population, false)}/person`
-                      : '—'
+                      ? `${formatCurrency(aAmt / primary.population, false)}${t('comparePerPerson')}`
+                      : t('dash')
                     : formatCurrency(aAmt, true)}
                   <br />
                   <span style={{ color: 'var(--ink-60)', fontWeight: 400 }}>
-                    {formatPercent(aPct)} of budget
+                    {formatPercent(aPct)} {t('compareOfBudget')}
                   </span>
                 </span>
               </div>
@@ -312,11 +347,9 @@ function ComparisonTable({
               <div className={`compare-diff ${diffClass}`}>
                 <div className="compare-diff__arrow">{arrow}</div>
                 <div>
-                  {Math.abs(diff) < 0.005
-                    ? '—'
-                    : formatPercent(Math.abs(diff))}
+                  {Math.abs(diff) < 0.005 ? t('dash') : formatPercent(Math.abs(diff))}
                 </div>
-                <div className="compare-diff__sub">share Δ</div>
+                <div className="compare-diff__sub">{t('compareShareDelta')}</div>
               </div>
 
               <div className="compare-bar compare-bar--right">
@@ -331,12 +364,12 @@ function ComparisonTable({
                 <span className="compare-bar__value">
                   {perCapitaMode
                     ? secondary.population
-                      ? `${formatCurrency(bAmt / secondary.population, false)}/person`
-                      : '—'
+                      ? `${formatCurrency(bAmt / secondary.population, false)}${t('comparePerPerson')}`
+                      : t('dash')
                     : formatCurrency(bAmt, true)}
                   <br />
                   <span style={{ color: 'var(--ink-60)', fontWeight: 400 }}>
-                    {formatPercent(bPct)} of budget
+                    {formatPercent(bPct)} {t('compareOfBudget')}
                   </span>
                 </span>
               </div>

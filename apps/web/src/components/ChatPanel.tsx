@@ -1,16 +1,11 @@
-import { type FormEvent } from 'react'
+import { useMemo, type FormEvent } from 'react'
+import { useI18n } from '../i18n/I18nProvider'
+import { formatStr } from '../i18n/strings'
 import type { BudgetReport, ChatResponse } from '../lib/types'
 import { isHttpUrl } from '../lib/api'
 import { formatFiscalYearDisplay } from '../lib/fiscal-year'
 import { formatChatAnswerToNodes } from '../lib/format-chat-answer'
 import { SectionHeading } from './SectionHeading'
-
-const SUGGESTIONS = [
-  'What stands out most about this budget?',
-  'Which bucket would a resident feel the biggest change in?',
-  'What tradeoffs does this year\u2019s budget imply?',
-  'Where is discretionary spending concentrated?',
-]
 
 interface ChatPanelProps {
   activeReport: BudgetReport
@@ -21,6 +16,8 @@ interface ChatPanelProps {
   isPending: boolean
   data: ChatResponse | undefined
   error: Error | null
+  /** When true, parsed report text is still being translated for non-English locales. */
+  chatContentPending?: boolean
 }
 
 export function ChatPanel({
@@ -32,28 +29,41 @@ export function ChatPanel({
   isPending,
   data,
   error,
+  chatContentPending = false,
 }: ChatPanelProps) {
+  const { t } = useI18n()
+  const fy = formatFiscalYearDisplay(activeReport.fiscalYearLabel)
+
+  const suggestions = useMemo(
+    () =>
+      [
+        t('chatSuggestion0'),
+        t('chatSuggestion1'),
+        t('chatSuggestion2'),
+        t('chatSuggestion3'),
+      ] as const,
+    [t],
+  )
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
     onSubmit()
   }
 
-  const fy = formatFiscalYearDisplay(activeReport.fiscalYearLabel)
+  const placeholder = formatStr(t('chatPlaceholder'), {
+    name: activeReport.displayName,
+    fy,
+  })
 
   return (
     <section className="section">
-      <SectionHeading num="05" eyebrow="Q & A with the Agent" title="Ask the ledger" />
+      <SectionHeading num="05" eyebrow={t('chatEyebrow')} title={t('chatTitle')} />
 
       <div className="chat-shell">
         <form className="chat-form" onSubmit={handleSubmit}>
           <div className="chat-suggestions">
-            {SUGGESTIONS.map((s) => (
-              <button
-                key={s}
-                type="button"
-                className="chat-chip"
-                onClick={() => onQuestionChange(s)}
-              >
+            {suggestions.map((s) => (
+              <button key={s} type="button" className="chat-chip" onClick={() => onQuestionChange(s)}>
                 {s}
               </button>
             ))}
@@ -64,21 +74,21 @@ export function ChatPanel({
             rows={3}
             value={question}
             onChange={(e) => onQuestionChange(e.target.value)}
-            placeholder={`Ask anything about ${activeReport.displayName}\u2019s ${fy} budget…`}
+            placeholder={placeholder}
           />
 
           <div className="chat-actions">
             <button
               className="btn"
               type="submit"
-              disabled={isPending || !question.trim()}
+              disabled={isPending || !question.trim() || chatContentPending}
             >
               {isPending && <span className="spinner" aria-hidden />}
-              {isPending ? 'Thinking…' : 'Ask the agent'}
+              {isPending ? t('btnThinking') : t('btnAskAgent')}
             </button>
             {isPending ? (
               <button type="button" className="btn btn--ghost" onClick={onCancel}>
-                Cancel
+                {t('btnCancel')}
               </button>
             ) : null}
           </div>
@@ -86,7 +96,7 @@ export function ChatPanel({
 
         {error ? (
           <div className="alert">
-            <strong>The agent couldn't answer that one.</strong>
+            <strong>{t('errChat')}</strong>
             <p>{error.message}</p>
           </div>
         ) : null}
@@ -100,7 +110,7 @@ export function ChatPanel({
               <p className="chat-answer__text">{formatChatAnswerToNodes(data.answer)}</p>
               {data.citations.length ? (
                 <div className="chat-answer__attribution">
-                  Cited sources:{' '}
+                  {t('chatCitedSources')}{' '}
                   {data.citations.slice(0, 4).map((c, i) => (
                     <span key={`${c.url}-${c.title}`}>
                       {i > 0 ? ' · ' : ''}
@@ -118,11 +128,7 @@ export function ChatPanel({
             </div>
           </div>
         ) : (
-          <p className="chat-placeholder">
-            The agent will answer in plain English, citing the sections of the
-            budget it pulled from. It's candid — and it'll tell you if the
-            document doesn't say.
-          </p>
+          <p className="chat-placeholder">{t('chatPlaceholderBody')}</p>
         )}
       </div>
     </section>

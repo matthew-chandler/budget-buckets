@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
+import { useI18n } from '../i18n/I18nProvider'
+import { formatStr } from '../i18n/strings'
 import type { SearchResult } from '../lib/types'
-import { formatDate } from '../lib/format'
 import { formatFiscalYearDisplay } from '../lib/fiscal-year'
 import { SectionHeading } from './SectionHeading'
 
@@ -65,23 +66,21 @@ export function Archive({
   activeKey,
   onSelect,
 }: ArchiveProps) {
+  const { t, formatDate } = useI18n()
   const groups = useMemo(() => groupResults(results), [results])
 
   return (
     <section className="section archive fade-in">
-      <SectionHeading num="00" eyebrow="The Archive" title="Cities already on file" />
+      <SectionHeading num="00" eyebrow={t('archiveEyebrow')} title={t('archiveTitle')} />
 
-      <div className="archive__lede">
-        Each city appears once; choose a fiscal year underneath to open that budget from the cache
-        (no live scrape).
-      </div>
+      <div className="archive__lede">{t('archiveLede')}</div>
 
       {isLoading ? (
-        <div className="archive-empty">Loading the stacks…</div>
+        <div className="archive-empty">{t('archiveLoading')}</div>
       ) : groups.length === 0 ? (
         <div className="archive-empty">
-          <p>The archive is empty.</p>
-          <span>Search a city above to file the first budget.</span>
+          <p>{t('archiveEmptyTitle')}</p>
+          <span>{t('archiveEmptyHint')}</span>
         </div>
       ) : (
         <ul className="archive-list">
@@ -97,7 +96,9 @@ export function Archive({
                     <span className="archive-row__state">, {g.state}</span>
                   </div>
                   <span className="archive-group__meta">
-                    {g.years.length} fiscal year{g.years.length === 1 ? '' : 's'} on file
+                    {g.years.length === 1
+                      ? t('archiveFyOne')
+                      : formatStr(t('archiveFyMany'), { n: g.years.length })}
                   </span>
                 </div>
               </div>
@@ -118,17 +119,17 @@ export function Archive({
                           {formatFiscalYearDisplay(r.fiscalYearLabel)}
                         </span>
                         <span className="archive-year-row__date">
-                          Filed {formatDate(r.updatedAt)}
+                          {t('archiveFiled')} {formatDate(r.updatedAt)}
                         </span>
                         <span className="archive-year-row__action">
                           {isLoadingThis ? (
                             <>
-                              <span className="spinner" aria-hidden /> Opening
+                              <span className="spinner" aria-hidden /> {t('archiveOpening')}
                             </>
                           ) : isActive ? (
-                            'Viewing'
+                            t('archiveViewing')
                           ) : (
-                            'Open →'
+                            t('archiveOpen')
                           )}
                         </span>
                       </button>

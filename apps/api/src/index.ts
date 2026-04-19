@@ -8,6 +8,7 @@ import {
   chatAboutBudget,
   compareBudgetReports,
   getBudgetHistory,
+  getLocalizedBudgetReport,
   resolveBudgetReport,
   resolveBudgetReportFromUploadedPdf,
   searchKnownCities,
@@ -65,6 +66,24 @@ app.get('/api/search', async (c) => {
 app.post('/api/reports/resolve', zValidator('json', resolveSchema), async (c) => {
   const body = c.req.valid('json')
   return c.json(await resolveBudgetReport(body))
+})
+
+app.get('/api/reports/localized', async (c) => {
+  const id = c.req.query('id')?.trim()
+  const localeRaw = c.req.query('locale')?.trim().toLowerCase()
+  if (!id) {
+    return c.json({ error: 'Query parameter id is required.' }, 400)
+  }
+  if (localeRaw !== 'en' && localeRaw !== 'es' && localeRaw !== 'zh') {
+    return c.json({ error: 'Query parameter locale must be en, es, or zh.' }, 400)
+  }
+  try {
+    const report = await getLocalizedBudgetReport(id, localeRaw)
+    return c.json({ report })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Report not found.'
+    return c.json({ error: message }, 404)
+  }
 })
 
 const MAX_PDF_BYTES = 100 * 1024 * 1024
@@ -147,11 +166,21 @@ app.post(
     'json',
     resolveSchema.extend({
       question: z.string().min(1),
+      language: z.enum(['en', 'es', 'zh']).optional(),
+      reportSnapshot: z.any().optional(),
     }),
   ),
   async (c) => {
     const body = c.req.valid('json')
-    return c.json(await chatAboutBudget(body))
+    const { reportSnapshot, ...rest } = body
+    return c.json(
+      await chatAboutBudget({
+        ...rest,
+        reportSnapshot: reportSnapshot
+          ? (reportSnapshot as import('./lib/types.js').BudgetReport)
+          : undefined,
+      }),
+    )
   },
 )
 

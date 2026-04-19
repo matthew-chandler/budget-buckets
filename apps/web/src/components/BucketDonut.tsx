@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
+import { bucketShortLabel, donutUnmappedShort } from '../i18n/buckets'
+import { useI18n } from '../i18n/I18nProvider'
+import { formatStr } from '../i18n/strings'
 import type { BucketAllocation } from '../lib/types'
-import { formatCurrency, formatPercent } from '../lib/format'
 
 export type DonutDenominator = 'adopted' | 'mapped'
 
@@ -20,6 +22,9 @@ const LEADER_OUTER = OUTER + 6
 const LEADER_ELBOW = OUTER + 26
 const LABEL_X_RIGHT = CX + 228
 const LABEL_X_LEFT = CX - 228
+/** Left labels in the upper-left quadrant use a slightly inset X so leaders stay shorter. */
+const LABEL_X_LEFT_UPPER = CX - 210
+const VIEW_MARGIN = 22
 
 const UNALLOCATED_KEY = '__unallocated__'
 const UNALLOCATED_COLOR = '#6b7280'
@@ -47,7 +52,7 @@ function donutArcPath(
 
 interface DonutSlice {
   sliceKey: string
-  label: string
+  shortLabel: string
   color: string
   amount: number
   /** Arc span as fraction of the full ring (sums to 1). */
@@ -57,6 +62,7 @@ interface DonutSlice {
 }
 
 export function BucketDonut({ buckets, totalBudget, denominator }: BucketDonutProps) {
+  const { locale, t, formatCurrency, formatPercent } = useI18n()
   const [active, setActive] = useState<string | null>(null)
 
   const visible = useMemo(
@@ -82,7 +88,7 @@ export function BucketDonut({ buckets, totalBudget, denominator }: BucketDonutPr
         const amt = bucket.amount ?? 0
         return {
           sliceKey: bucket.key,
-          label: bucket.label,
+          shortLabel: bucketShortLabel(bucket.key, locale),
           color: bucket.color,
           amount: amt,
           arcFraction: amt / total,
@@ -93,7 +99,7 @@ export function BucketDonut({ buckets, totalBudget, denominator }: BucketDonutPr
       if (gap > 0 && gap / total >= 0.002) {
         out.push({
           sliceKey: UNALLOCATED_KEY,
-          label: 'Unmapped / other funds',
+          shortLabel: donutUnmappedShort(locale),
           color: UNALLOCATED_COLOR,
           amount: gap,
           arcFraction: gap / total,
@@ -103,20 +109,19 @@ export function BucketDonut({ buckets, totalBudget, denominator }: BucketDonutPr
       return out
     }
 
-    // mapped: wedge sizes match % of extracted bucket totals
     return visible.map((bucket) => {
       const amt = bucket.amount ?? 0
       const f = amt / sumMapped
       return {
         sliceKey: bucket.key,
-        label: bucket.label,
+        shortLabel: bucketShortLabel(bucket.key, locale),
         color: bucket.color,
         amount: amt,
         arcFraction: f,
         labelFraction: f,
       }
     })
-  }, [visible, totalBudget, denominator])
+  }, [visible, totalBudget, denominator, locale])
 
   const arcSlices = useMemo(() => {
     let cursor = -Math.PI / 2
@@ -138,8 +143,8 @@ export function BucketDonut({ buckets, totalBudget, denominator }: BucketDonutPr
   if (!visible.length || !slices.length) {
     return (
       <div className="empty-chart">
-        <p>No bucket totals extracted yet.</p>
-        <span>The agent can still surface citations and answer questions below.</span>
+        <p>{t('donutEmptyTitle')}</p>
+        <span>{t('donutEmptyHint')}</span>
       </div>
     )
   }
@@ -156,26 +161,79 @@ export function BucketDonut({ buckets, totalBudget, denominator }: BucketDonutPr
     else leftLabels.push(s)
   }
   rightLabels.sort((a, b) => Math.sin(a.mid) - Math.sin(b.mid))
-  leftLabels.sort((a, b) => Math.sin(a.mid) - Math.sin(b.mid))
+  leftLabels.sort((a, b) => Math.sin(b.mid) - Math.sin(a.mid))
 
-  const MIN_GAP = 28
+  const MIN_GAP = 30
 
-  function resolveY(side: typeof rightLabels) {
-    const out = side.map((s) => ({
-      slice: s,
-      y: polar(CX, CY, LEADER_ELBOW, s.mid).y,
-    }))
-    for (let i = 1; i < out.length; i++) {
-      const prev = out[i - 1]
-      if (out[i].y - prev.y < MIN_GAP) {
-        out[i].y = prev.y + MIN_GAP
-      }
+  /**
+   * Spread label Y positions to satisfy MIN_GAP without only shoving downward (which bunches
+   * everything into a bottom corner). Forward + backward pass, then rigid shift to stay on-canvas.
+   */
+  function resolveYsBidirectional(side: typeof rightLabels): { slice: (typeof side)[0]; y: number }[] {
+    if (side.length === 0) return []
+
+    const ideal = side.map((s) => polar(CX, CY, LEADER_ELBOW, s.mid).y)
+    const order = side.map((_, i) => i).sort((a, b) => ideal[a] - ideal[b])
+    const ys = order.map((i) => ideal[i])
+    const n = ys.length
+
+    for (let i = 1; i < n; i++) {
+      if (ys[i] - ys[i - 1] < MIN_GAP) ys[i] = ys[i - 1] + MIN_GAP
     }
-    return out
+    for (let i = n - 2; i >= 0; i--) {
+      if (ys[i + 1] - ys[i] < MIN_GAP) ys[i] = ys[i + 1] - MIN_GAP
+    }
+
+    const labelPad = 22
+    let shift = 0
+    let minY = Math.min(...ys) - labelPad
+    let maxY = Math.max(...ys) + labelPad
+    if (minY < VIEW_MARGIN) shift = VIEW_MARGIN - minY
+    if (maxY + shift > VIEW_H - VIEW_MARGIN) {
+      shift = VIEW_H - VIEW_MARGIN - maxY
+    }
+    const shifted = ys.map((y) => y + shift)
+
+    const yByIndex = new Array<number>(side.length)
+    order.forEach((origIdx, k) => {
+      yByIndex[origIdx] = shifted[k]
+    })
+    return side.map((s, i) => ({ slice: s, y: yByIndex[i] }))
   }
 
-  const rightYs = resolveY(rightLabels)
-  const leftYs = resolveY(leftLabels)
+  /** Upper half of the left semicircle (smaller screen Y): labels can sit above their arcs without one column stacking from the bottom. */
+  const leftUpper = leftLabels.filter((s) => Math.sin(s.mid) < 0)
+  const leftLower = leftLabels.filter((s) => Math.sin(s.mid) >= 0)
+
+  const rightYs = resolveYsBidirectional(rightLabels)
+  const leftUpperYs = resolveYsBidirectional(leftUpper)
+  const leftLowerYs = resolveYsBidirectional(leftLower)
+
+  if (leftUpperYs.length && leftLowerYs.length) {
+    const bottomUpper = Math.max(...leftUpperYs.map((r) => r.y))
+    const topLower = Math.min(...leftLowerYs.map((r) => r.y))
+    if (topLower - bottomUpper < MIN_GAP) {
+      const bump = bottomUpper + MIN_GAP - topLower
+      for (const row of leftLowerYs) row.y += bump
+    }
+  }
+
+  const allLeftLeaderYs = [...leftUpperYs, ...leftLowerYs]
+  if (allLeftLeaderYs.length) {
+    const labelPad = 22
+    let bottom = Math.max(...allLeftLeaderYs.map((r) => r.y)) + labelPad
+    if (bottom > VIEW_H - VIEW_MARGIN) {
+      const adj = VIEW_H - VIEW_MARGIN - bottom
+      for (const row of allLeftLeaderYs) row.y += adj
+    }
+    let top = Math.min(...allLeftLeaderYs.map((r) => r.y)) - labelPad
+    if (top < VIEW_MARGIN) {
+      const adj = VIEW_MARGIN - top
+      for (const row of allLeftLeaderYs) row.y += adj
+    }
+  }
+
+  const donutAria = denominator === 'adopted' ? t('donutAriaAdopted') : t('donutAriaMapped')
 
   return (
     <div className="donut-wrap">
@@ -183,11 +241,7 @@ export function BucketDonut({ buckets, totalBudget, denominator }: BucketDonutPr
         viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
         className="donut-svg"
         role="img"
-        aria-label={
-          denominator === 'adopted'
-            ? 'Budget breakdown donut chart, shares of adopted total'
-            : 'Budget breakdown donut chart, shares of extracted bucket totals'
-        }
+        aria-label={donutAria}
       >
         {ticks.map((angle, i) => {
           const outer = polar(CX, CY, OUTER + 3, angle)
@@ -221,16 +275,15 @@ export function BucketDonut({ buckets, totalBudget, denominator }: BucketDonutPr
                 onBlur={() => setActive(null)}
                 tabIndex={0}
                 role="button"
-                aria-label={`${shortLabel(s.slice.label)}: ${formatCurrency(s.slice.amount, true)}, ${formatPercent(s.slice.labelFraction)}`}
+                aria-label={`${s.slice.shortLabel}: ${formatCurrency(s.slice.amount, true)}, ${formatPercent(s.slice.labelFraction)}`}
               />
             )
           })}
         </g>
 
-        {rightLabels.map((s, i) => {
+        {rightYs.map(({ slice: s, y }) => {
           const start = polar(CX, CY, LEADER_OUTER, s.mid)
           const elbow = polar(CX, CY, LEADER_ELBOW, s.mid)
-          const y = rightYs[i].y
           const endX = LABEL_X_RIGHT - 10
           const path = `M ${start.x} ${start.y} L ${elbow.x} ${elbow.y} L ${endX} ${y}`
           const isDim = active !== null && active !== s.slice.sliceKey
@@ -244,11 +297,11 @@ export function BucketDonut({ buckets, totalBudget, denominator }: BucketDonutPr
                 className="donut-leader-label"
                 textAnchor="start"
               >
-                {shortLabel(s.slice.label)}
+                {s.slice.shortLabel}
               </text>
               <text
                 x={LABEL_X_RIGHT - 4}
-                y={y + 10}
+                y={y + 13}
                 className="donut-leader-pct"
                 textAnchor="start"
               >
@@ -258,15 +311,44 @@ export function BucketDonut({ buckets, totalBudget, denominator }: BucketDonutPr
           )
         })}
 
-        {leftLabels.map((s, i) => {
+        {leftUpperYs.map(({ slice: s, y }) => {
           const start = polar(CX, CY, LEADER_OUTER, s.mid)
           const elbow = polar(CX, CY, LEADER_ELBOW, s.mid)
-          const y = leftYs[i].y
+          const endX = LABEL_X_LEFT_UPPER + 10
+          const path = `M ${start.x} ${start.y} L ${elbow.x} ${elbow.y} L ${endX} ${y}`
+          const isDim = active !== null && active !== s.slice.sliceKey
+          return (
+            <g key={`lu-${s.slice.sliceKey}`} opacity={isDim ? 0.35 : 1}>
+              <path d={path} className="donut-leader" />
+              <circle cx={endX} cy={y} r={2} className="donut-leader-dot" />
+              <text
+                x={LABEL_X_LEFT_UPPER + 4}
+                y={y - 4}
+                className="donut-leader-label"
+                textAnchor="end"
+              >
+                {s.slice.shortLabel}
+              </text>
+              <text
+                x={LABEL_X_LEFT_UPPER + 4}
+                y={y + 13}
+                className="donut-leader-pct"
+                textAnchor="end"
+              >
+                {formatPercent(s.slice.labelFraction)} · {formatCurrency(s.slice.amount, true)}
+              </text>
+            </g>
+          )
+        })}
+
+        {leftLowerYs.map(({ slice: s, y }) => {
+          const start = polar(CX, CY, LEADER_OUTER, s.mid)
+          const elbow = polar(CX, CY, LEADER_ELBOW, s.mid)
           const endX = LABEL_X_LEFT + 10
           const path = `M ${start.x} ${start.y} L ${elbow.x} ${elbow.y} L ${endX} ${y}`
           const isDim = active !== null && active !== s.slice.sliceKey
           return (
-            <g key={`l-${s.slice.sliceKey}`} opacity={isDim ? 0.35 : 1}>
+            <g key={`ll-${s.slice.sliceKey}`} opacity={isDim ? 0.35 : 1}>
               <path d={path} className="donut-leader" />
               <circle cx={endX} cy={y} r={2} className="donut-leader-dot" />
               <text
@@ -275,11 +357,11 @@ export function BucketDonut({ buckets, totalBudget, denominator }: BucketDonutPr
                 className="donut-leader-label"
                 textAnchor="end"
               >
-                {shortLabel(s.slice.label)}
+                {s.slice.shortLabel}
               </text>
               <text
                 x={LABEL_X_LEFT + 4}
-                y={y + 10}
+                y={y + 13}
                 className="donut-leader-pct"
                 textAnchor="end"
               >
@@ -291,29 +373,22 @@ export function BucketDonut({ buckets, totalBudget, denominator }: BucketDonutPr
 
         <g className="donut-center">
           <text x={CX} y={CY - 28} className="donut-center__kicker">
-            {activeSlice ? shortLabel(activeSlice.label) : 'Adopted Budget'}
+            {activeSlice ? activeSlice.shortLabel : t('donutCenterAdopted')}
           </text>
           <text x={CX} y={CY + 10} className="donut-center__value">
             {formatCurrency(activeSlice?.amount ?? totalArcAmount, true)}
           </text>
           <text x={CX} y={CY + 32} className="donut-center__sub">
             {activeSlice
-              ? `${formatPercent(activeSlice.labelFraction)} of ring basis`
-              : `${slices.length} segment${slices.length === 1 ? '' : 's'}`}
+              ? formatStr(t('donutCenterOfRing'), {
+                  pct: String(Math.round(activeSlice.labelFraction * 100)),
+                })
+              : slices.length === 1
+                ? formatStr(t('donutCenterSegments'), { n: slices.length })
+                : formatStr(t('donutCenterSegmentsPlural'), { n: slices.length })}
           </text>
         </g>
       </svg>
     </div>
   )
-}
-
-function shortLabel(label: string): string {
-  return label
-    .replace('Government Operations & Administration', 'Gov. Operations')
-    .replace('Public Works & Infrastructure', 'Public Works')
-    .replace('Public Safety & Justice', 'Public Safety')
-    .replace('Health & Human Services', 'Health & Human Svc.')
-    .replace('Community & Recreation', 'Community & Rec.')
-    .replace('Economic Development', 'Economic Dev.')
-    .replace('Unmapped / other funds', 'Unmapped')
 }

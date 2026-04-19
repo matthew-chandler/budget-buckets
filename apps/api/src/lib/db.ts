@@ -81,6 +81,17 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_budget_reports_display_name
     ON budget_reports(display_name);
+
+  CREATE TABLE IF NOT EXISTS report_translations (
+    report_id TEXT NOT NULL,
+    locale TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (report_id, locale)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_report_translations_report
+    ON report_translations(report_id);
 `)
 
 function rowToReport(row: ReportRow): PersistedBudgetReport {
@@ -234,6 +245,51 @@ export async function getBudgetReportByCityYear(
   `).get(citySlug, stateSlug, fiscalYearLabel) as ReportRow | undefined
 
   return row ? rowToReport(row) : null
+}
+
+export async function getBudgetReportById(id: string): Promise<PersistedBudgetReport | null> {
+  const row = db.prepare(`
+    SELECT * FROM budget_reports WHERE id = ? LIMIT 1
+  `).get(id) as ReportRow | undefined
+
+  return row ? rowToReport(row) : null
+}
+
+export function deleteReportTranslationsForReport(reportId: string): void {
+  db.prepare(`DELETE FROM report_translations WHERE report_id = ?`).run(reportId)
+}
+
+export function getReportTranslationJson(
+  reportId: string,
+  locale: 'es' | 'zh',
+): string | null {
+  const row = db
+    .prepare(
+      `
+    SELECT payload_json FROM report_translations
+    WHERE report_id = ? AND locale = ?
+  `,
+    )
+    .get(reportId, locale) as { payload_json: string } | undefined
+
+  return row?.payload_json ?? null
+}
+
+export function upsertReportTranslation(
+  reportId: string,
+  locale: 'es' | 'zh',
+  payloadJson: string,
+): void {
+  const now = new Date().toISOString()
+  db.prepare(
+    `
+    INSERT INTO report_translations (report_id, locale, payload_json, updated_at)
+    VALUES (@reportId, @locale, @payloadJson, @updatedAt)
+    ON CONFLICT(report_id, locale) DO UPDATE SET
+      payload_json = excluded.payload_json,
+      updated_at = excluded.updated_at
+  `,
+  ).run({ reportId, locale, payloadJson, updatedAt: now })
 }
 
 export async function listBudgetReportsForCity(

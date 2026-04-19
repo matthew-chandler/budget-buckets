@@ -1,11 +1,15 @@
 import type { CSSProperties } from 'react'
 
-export function formatCurrency(amount: number | null, compact = false): string {
+export function formatCurrency(
+  amount: number | null,
+  compact = false,
+  locale = 'en-US',
+): string {
   if (amount === null || amount === undefined || Number.isNaN(amount)) {
     return '—'
   }
 
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency: 'USD',
     notation: compact ? 'compact' : 'standard',
@@ -13,28 +17,28 @@ export function formatCurrency(amount: number | null, compact = false): string {
   }).format(amount)
 }
 
-export function formatPercent(value: number | null): string {
+export function formatPercent(value: number | null, locale = 'en-US'): string {
   if (value === null || value === undefined || Number.isNaN(value)) {
     return '—'
   }
 
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat(locale, {
     style: 'percent',
     maximumFractionDigits: 1,
   }).format(value)
 }
 
-export function formatNumber(value: number | null): string {
+export function formatNumber(value: number | null, locale = 'en-US'): string {
   if (value === null || value === undefined || Number.isNaN(value)) {
     return '—'
   }
 
-  return new Intl.NumberFormat('en-US').format(value)
+  return new Intl.NumberFormat(locale).format(value)
 }
 
-export function formatDate(iso: string): string {
+export function formatDate(iso: string, locale = 'en-US'): string {
   try {
-    return new Date(iso).toLocaleDateString('en-US', {
+    return new Date(iso).toLocaleDateString(locale, {
       year: 'numeric',
       month: 'short',
       day: 'numeric',

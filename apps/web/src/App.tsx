@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PdfUploadEntry } from './lib/types'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useI18n } from './i18n/I18nProvider'
 import { apiFetch } from './lib/api'
+import { useTranslatedReport } from './lib/useTranslatedReport'
 import type {
   BudgetReport,
   ChatResponse,
@@ -22,9 +24,6 @@ import { HistorySection } from './components/HistorySection'
 import { ChatPanel } from './components/ChatPanel'
 import { Footer } from './components/Footer'
 
-const DEFAULT_QUESTION =
-  'What stands out most about this budget, and what would a resident probably notice?'
-
 const REQ_TIMEOUT_MS = 120_000
 const CHAT_TIMEOUT_MS = 90_000
 
@@ -43,6 +42,10 @@ function withTimeout(signal: AbortSignal | undefined, ms: number): AbortSignal {
 }
 
 export default function App() {
+  const { locale, t } = useI18n()
+  const queryClient = useQueryClient()
+  const prevLocaleRef = useRef(locale)
+
   const [city, setCity] = useState('Los Angeles')
   const [state, setState] = useState('CA')
   const [fiscalYear, setFiscalYear] = useState('')
@@ -55,7 +58,11 @@ export default function App() {
   const [compareYear, setCompareYear] = useState('')
 
   const [historyYear, setHistoryYear] = useState('')
-  const [chatQuestion, setChatQuestion] = useState(DEFAULT_QUESTION)
+  const [chatQuestion, setChatQuestion] = useState(() => t('defaultChatQuestion'))
+
+  useEffect(() => {
+    setChatQuestion(t('defaultChatQuestion'))
+  }, [locale, t])
 
   const [donutDenominator, setDonutDenominator] = useState<DonutDenominator>('adopted')
   const [comparePerCapita, setComparePerCapita] = useState(false)
@@ -89,6 +96,18 @@ export default function App() {
   useEffect(() => {
     if (activeReport?.id) setDonutDenominator('adopted')
   }, [activeReport?.id])
+
+  useEffect(() => {
+    if (prevLocaleRef.current === locale) return
+    prevLocaleRef.current = locale
+    queryClient.resetQueries({ queryKey: ['report-translation'] })
+  }, [locale, queryClient])
+
+  const {
+    displayReport: dossierReport,
+    isTranslating: isTranslatingReport,
+    translationError,
+  } = useTranslatedReport(activeReport)
 
   const historyQuery = useQuery({
     queryKey: [
@@ -212,7 +231,7 @@ export default function App() {
         if (!c || !s) {
           failures.push({
             name: entry.file.name,
-            message: 'City and state are required for each PDF.',
+            message: t('pdfCityStateRequired'),
           })
           continue
         }
@@ -235,7 +254,7 @@ export default function App() {
         } catch (err) {
           failures.push({
             name: entry.file.name,
-            message: err instanceof Error ? err.message : 'Request failed.',
+            message: err instanceof Error ? err.message : t('requestFailed'),
           })
         }
       }
@@ -329,6 +348,8 @@ export default function App() {
           state: activeReport!.state,
           fiscalYear: activeReport!.fiscalYearLabel,
           question: chatQuestion,
+          language: locale,
+          ...(locale !== 'en' ? { reportSnapshot: dossierReport } : {}),
         }),
         signal: withTimeout(ac.signal, CHAT_TIMEOUT_MS),
       })
@@ -366,14 +387,14 @@ export default function App() {
 
         {resolveMutation.error ? (
           <div className="alert">
-            <strong>Couldn't load that budget.</strong>
+            <strong>{t('errLoadBudget')}</strong>
             <p>{resolveMutation.error.message}</p>
           </div>
         ) : null}
 
         {uploadPdfFailures.length > 0 ? (
           <div className="alert">
-            <strong>Some PDFs could not be analyzed.</strong>
+            <strong>{t('errPdfPartial')}</strong>
             <ul style={{ margin: '8px 0 0', paddingLeft: 20 }}>
               {uploadPdfFailures.map((f, i) => (
                 <li key={`${i}-${f.name}`}>
@@ -397,8 +418,17 @@ export default function App() {
 
         {activeReport ? (
           <>
+            {locale !== 'en' && (isTranslatingReport || translationError) ? (
+              <div className="translate-banner" role="status">
+                {isTranslatingReport ? <p>{t('hintTranslatingContent')}</p> : null}
+                {translationError ? (
+                  <p className="translate-banner__err">{t('errTranslation')}</p>
+                ) : null}
+              </div>
+            ) : null}
+
             <Dossier
-              report={activeReport}
+              report={dossierReport!}
               fromCache={activeFromCache}
               donutDenominator={donutDenominator}
               onDonutDenominatorChange={setDonutDenominator}
@@ -433,7 +463,7 @@ export default function App() {
             />
 
             <ChatPanel
-              activeReport={activeReport}
+              activeReport={dossierReport!}
               question={chatQuestion}
               onQuestionChange={setChatQuestion}
               onSubmit={() => chatMutation.mutate()}
@@ -441,6 +471,7 @@ export default function App() {
               isPending={chatMutation.isPending}
               data={chatMutation.data}
               error={chatMutation.error}
+              chatContentPending={locale !== 'en' && isTranslatingReport}
             />
           </>
         ) : null}

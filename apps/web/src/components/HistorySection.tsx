@@ -1,6 +1,6 @@
 import { type FormEvent } from 'react'
+import { useI18n } from '../i18n/I18nProvider'
 import type { BudgetReport, HistoryResponse } from '../lib/types'
-import { formatCurrency, formatPercent } from '../lib/format'
 import { formatFiscalYearDisplay } from '../lib/fiscal-year'
 import { SectionHeading } from './SectionHeading'
 
@@ -21,6 +21,7 @@ export function HistorySection({
   isPending,
   data,
 }: HistorySectionProps) {
+  const { t, intlLocale, formatCurrency, formatPercent } = useI18n()
   const reports = data?.reports ?? []
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -31,12 +32,12 @@ export function HistorySection({
     <section className="section">
       <SectionHeading
         num="04"
-        eyebrow="Across Time"
-        title="How the total has moved, year over year"
+        eyebrow={t('historyEyebrow')}
+        title={t('historyTitle')}
       />
 
       <div className="history-shell">
-        <HistoryLineChart reports={reports} />
+        <HistoryLineChart reports={reports} intlLocale={intlLocale} />
 
         <div className="history-side">
           <h3>{activeReport.displayName}</h3>
@@ -53,10 +54,10 @@ export function HistorySection({
                   delta === null
                     ? ''
                     : delta > 0
-                    ? 'is-up'
-                    : delta < 0
-                    ? 'is-down'
-                    : ''
+                      ? 'is-up'
+                      : delta < 0
+                        ? 'is-down'
+                        : ''
                 return (
                   <div key={r.id} className="history-item">
                     <span className="history-item__year" title={r.fiscalYearLabel}>
@@ -67,7 +68,7 @@ export function HistorySection({
                     </span>
                     <span className={`history-item__delta ${deltaClass}`}>
                       {delta === null
-                        ? '—'
+                        ? t('dash')
                         : (delta > 0 ? '+' : '') + formatPercent(delta)}
                     </span>
                   </div>
@@ -76,18 +77,18 @@ export function HistorySection({
             </div>
           ) : (
             <p style={{ color: 'var(--ink-60)', fontStyle: 'italic' }}>
-              Only one fiscal year stored so far — pull another below.
+              {t('historyOnlyOneYear')}
             </p>
           )}
 
           <form className="history-form" onSubmit={handleSubmit}>
             <div className="field">
-              <label htmlFor="hist-year">Load another fiscal year</label>
+              <label htmlFor="hist-year">{t('historyLoadYear')}</label>
               <input
                 id="hist-year"
                 value={historyYear}
                 onChange={(e) => onHistoryYearChange(e.target.value)}
-                placeholder="FY 2022-23"
+                placeholder={t('phFY')}
               />
             </div>
             <button
@@ -95,7 +96,7 @@ export function HistorySection({
               type="submit"
               disabled={isPending || !historyYear.trim()}
             >
-              {isPending ? 'Loading…' : 'Pull year'}
+              {isPending ? t('btnLoading') : t('btnPullYear')}
             </button>
           </form>
         </div>
@@ -104,13 +105,20 @@ export function HistorySection({
   )
 }
 
-function HistoryLineChart({ reports }: { reports: BudgetReport[] }) {
+function HistoryLineChart({
+  reports,
+  intlLocale,
+}: {
+  reports: BudgetReport[]
+  intlLocale: string
+}) {
+  const { t } = useI18n()
   const plotted = reports.filter((r) => r.totalBudget !== null)
 
   if (plotted.length < 2) {
     return (
       <div className="history-chart" style={{ aspectRatio: '3 / 1.8' }}>
-        <div className="history-chart__fignote">Fig. 2</div>
+        <div className="history-chart__fignote">{t('historyFig')}</div>
         <div
           style={{
             display: 'flex',
@@ -124,7 +132,7 @@ function HistoryLineChart({ reports }: { reports: BudgetReport[] }) {
             textAlign: 'center',
           }}
         >
-          Two or more fiscal years needed to draw a trend.
+          {t('historyNeedTwoYears')}
         </div>
       </div>
     )
@@ -162,7 +170,6 @@ function HistoryLineChart({ reports }: { reports: BudgetReport[] }) {
   const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
   const areaPath = `${linePath} L ${points[points.length - 1].x} ${H - PAD_B} L ${points[0].x} ${H - PAD_B} Z`
 
-  // 4 horizontal gridlines
   const gridCount = 4
   const gridlines = Array.from({ length: gridCount + 1 }, (_, i) => {
     const val = yMin + ((yMax - yMin) * i) / gridCount
@@ -172,7 +179,7 @@ function HistoryLineChart({ reports }: { reports: BudgetReport[] }) {
 
   return (
     <div className="history-chart">
-      <div className="history-chart__fignote">Fig. 2 — Adopted total</div>
+      <div className="history-chart__fignote">{t('historyFigCaption')}</div>
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
         {gridlines.map((g, i) => (
           <g key={i}>
@@ -189,7 +196,8 @@ function HistoryLineChart({ reports }: { reports: BudgetReport[] }) {
               textAnchor="end"
               className="history-tick-label"
             >
-              ${Intl.NumberFormat('en-US', {
+              $
+              {Intl.NumberFormat(intlLocale, {
                 notation: 'compact',
                 maximumFractionDigits: 1,
               }).format(g.val)}
@@ -230,7 +238,7 @@ function HistoryLineChart({ reports }: { reports: BudgetReport[] }) {
               textAnchor="middle"
               className="history-label"
             >
-              {Intl.NumberFormat('en-US', {
+              {Intl.NumberFormat(intlLocale, {
                 style: 'currency',
                 currency: 'USD',
                 notation: 'compact',

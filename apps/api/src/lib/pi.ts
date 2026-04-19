@@ -16,12 +16,12 @@ import {
   readPdfDocumentInfo,
   renderPdfPagePng,
 } from './document-reader.js'
-import type {
-  BudgetReport,
-  ChatResponse,
-  Citation,
-  ScrapedBudgetPayload,
-} from './types.js'
+import {
+  assertTranslationPayloadShape,
+  buildReportTranslationPayload,
+  type ReportTranslationPayload,
+} from './report-translation.js'
+import type { BudgetReport, ChatResponse, Citation, ScrapedBudgetPayload } from './types.js'
 import { extractJsonObject } from './utils.js'
 
 const FIREWORKS_PROVIDER = 'fireworks-router'
@@ -78,6 +78,95 @@ Rules:
 - Keep answers concise and specific.
 - When helpful, mention relevant source titles or URLs from the provided citations.
 `.trim()
+
+const CHAT_OUTPUT_LANGUAGE: Record<'en' | 'es' | 'zh', string> = {
+  en: 'Write your entire answer in English.',
+  es: 'Escribe toda tu respuesta en español.',
+  zh: '请用简体中文撰写完整回答。',
+}
+
+const TRANSLATE_TARGET_LABEL: Record<'es' | 'zh', string> = {
+  es: 'Spanish',
+  zh: 'Simplified Chinese',
+}
+
+const TRANSLATE_SYSTEM_PROMPT = `
+You translate municipal budget UI text for end users.
+
+Return ONLY valid JSON matching the exact shape in the user message. No markdown, no code fences, no commentary.
+
+Rules:
+- Translate every natural-language string into the requested target language with a neutral civic-budget tone.
+- Preserve every URL character-for-character. Preserve numbers, ISO timestamps, currency codes, fiscal year labels, city, state, displayName, id, and structural nulls.
+- Each bucket object has a "key" field (e.g. public-safety-justice). Copy those key strings EXACTLY — same spelling and hyphens. Never translate or rename bucket keys.
+- Do not add or remove array entries. Keep the same number of buckets, rawCategories, and citations as in the input.
+- Translate summaries, notes, citation titles, source titles, source notes, category names, and bucket summaries.
+`.trim()
+
+async function translateReportPayloadAttempt(
+  report: BudgetReport,
+  language: 'es' | 'zh',
+): Promise<ReportTranslationPayload> {
+  const cwd = await mkdtemp(join(tmpdir(), 'budget-buckets-translate-'))
+  let agentDir: string | null = null
+
+  try {
+    const result = await createFireworksAgentSession({
+      cwd,
+      tools: [],
+    })
+    agentDir = result.agentDir
+    const { session, modelFallbackMessage } = result
+
+    if (!session.model) {
+      throw new Error(modelFallbackMessage ?? 'No Pi model is configured. Run `pi /login` or set an API key first.')
+    }
+
+    session.agent.state.systemPrompt = TRANSLATE_SYSTEM_PROMPT
+
+    const payload = buildReportTranslationPayload(report)
+    const target = TRANSLATE_TARGET_LABEL[language]
+
+    await session.prompt(
+      [
+        `Target language: ${target} (${language}).`,
+        'Translate the string fields in this JSON. Output the same JSON shape only:',
+        JSON.stringify(payload, null, 2),
+      ].join('\n\n'),
+      { expandPromptTemplates: false },
+    )
+
+    const text = session.getLastAssistantText()
+    if (!text) {
+      throw new Error('The translation model did not return any text.')
+    }
+
+    const translated = extractJsonObject<ReportTranslationPayload>(text)
+    assertTranslationPayloadShape(report, translated)
+    return translated
+  } finally {
+    await rm(cwd, { recursive: true, force: true })
+    if (agentDir) {
+      await rm(agentDir, { recursive: true, force: true })
+    }
+  }
+}
+
+/** Produces a translation payload (for DB storage) via the configured LLM. */
+export async function translateReportPayloadWithPi(
+  report: BudgetReport,
+  language: 'es' | 'zh',
+): Promise<ReportTranslationPayload> {
+  try {
+    return await translateReportPayloadAttempt(report, language)
+  } catch (first) {
+    if (DEBUG_PI) {
+      console.error('[translateReportPayloadWithPi] first attempt failed, retrying once:', first)
+    }
+    await new Promise((r) => setTimeout(r, 900))
+    return await translateReportPayloadAttempt(report, language)
+  }
+}
 
 const readDocumentTool = defineTool({
   name: 'read_document',
@@ -720,7 +809,11 @@ Do not spend time exploring the environment. Do not run setup or discovery comma
   }
 }
 
-export async function answerBudgetQuestion(report: BudgetReport, question: string): Promise<ChatResponse> {
+export async function answerBudgetQuestion(
+  report: BudgetReport,
+  question: string,
+  language: 'en' | 'es' | 'zh' = 'en',
+): Promise<ChatResponse> {
   const cwd = await mkdtemp(join(tmpdir(), 'budget-buckets-chat-'))
   let agentDir: string | null = null
 
@@ -736,7 +829,7 @@ export async function answerBudgetQuestion(report: BudgetReport, question: strin
       throw new Error(modelFallbackMessage ?? 'No Pi model is configured. Run `pi /login` or set an API key first.')
     }
 
-    session.agent.state.systemPrompt = CHAT_SYSTEM_PROMPT
+    session.agent.state.systemPrompt = `${CHAT_SYSTEM_PROMPT}\n\n${CHAT_OUTPUT_LANGUAGE[language]}`
 
     await session.prompt(
       [

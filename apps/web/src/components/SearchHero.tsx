@@ -1,4 +1,6 @@
 import { useRef, useState, type FormEvent } from 'react'
+import { useI18n } from '../i18n/I18nProvider'
+import { formatStr } from '../i18n/strings'
 import type { PdfUploadEntry } from '../lib/types'
 import { hintsFromPdfFilename } from '../lib/pdf-filename-hint'
 
@@ -29,6 +31,7 @@ export function SearchHero({
   isUploading,
   hasReport,
 }: SearchHeroProps) {
+  const { t } = useI18n()
   const pdfInputRef = useRef<HTMLInputElement>(null)
   const [pdfEntries, setPdfEntries] = useState<PdfUploadEntry[]>([])
   const [pdfEntryError, setPdfEntryError] = useState<string | null>(null)
@@ -53,16 +56,14 @@ export function SearchHero({
     if (!pdfEntries.length) return
 
     if (pdfEntries.some((row) => !row.city.trim() || !row.state.trim())) {
-      setPdfEntryError('City and state are required for each PDF.')
+      setPdfEntryError(t('pdfCityStateRequired'))
       return
     }
 
     const keys = pdfEntries.map(entryKey)
     const dup = keys.find((k, i) => keys.indexOf(k) !== i)
     if (dup) {
-      setPdfEntryError(
-        'Two rows match the same city, state, and fiscal year — that would overwrite one saved report. Change the fiscal year or city on one of the rows.',
-      )
+      setPdfEntryError(t('pdfDuplicateFy'))
       return
     }
     setPdfEntryError(null)
@@ -75,51 +76,51 @@ export function SearchHero({
     if (pdfInputRef.current) pdfInputRef.current.value = ''
   }
 
+  const uploadReadyNote =
+    pdfEntries.length === 0
+      ? t('uploadIdleHint')
+      : pdfEntries.length === 1
+        ? t('uploadReadyOne')
+        : formatStr(t('uploadReadyMany'), { n: pdfEntries.length })
+
   return (
     <section className="frontpage">
       <div className="frontpage__kicker">
         <span className="dot" aria-hidden />
-        <p className="eyebrow">Dispatch &mdash; Fiscal Reportage</p>
+        <p className="eyebrow">{t('searchEyebrow')}</p>
       </div>
 
       <div className="frontpage__grid">
         <div className="fade-in">
           <h1 className="frontpage__headline">
-            Where does <em>your city</em> actually spend the money?
+            {t('searchHeadlineBefore')}
+            <em>{t('searchHeadlineEm')}</em>
+            {t('searchHeadlineAfter')}
           </h1>
 
-          <p className="frontpage__lede frontpage__lede--dropcap">
-            Municipal budgets are public documents &mdash; but they read like fine
-            print. Budget Buckets reads them for you. Type a city, and our agent
-            fetches the adopted budget, maps every line item into nine civic
-            buckets, and shows what the numbers actually mean for the people who
-            live there. No spin, just the ledger.
-          </p>
+          <p className="frontpage__lede frontpage__lede--dropcap">{t('searchLede')}</p>
 
           <div className="frontpage__byline">
-            <span>By an autonomous Pi agent</span>
+            <span>{t('searchBylineAgent')}</span>
             <span>·</span>
-            <span>Cited to official sources</span>
+            <span>{t('searchBylineCited')}</span>
             <span>·</span>
-            <span>Free &amp; open</span>
+            <span>{t('searchBylineFree')}</span>
           </div>
         </div>
 
         <div className="fade-in fade-in--d2">
           <fieldset className="search-fieldset">
-            <legend className="search-fieldset__legend">Search &amp; open a budget</legend>
-            <p className="search-fieldset__hint">
-              These fields are only for the live search below — they are{' '}
-              <strong>not</strong> used when you upload PDFs.
-            </p>
+            <legend className="search-fieldset__legend">{t('searchLegend')}</legend>
+            <p className="search-fieldset__hint">{t('searchHint')}</p>
             <form className="search-card search-card--primary" onSubmit={handleSearch}>
               <div className="field field--full">
-                <label htmlFor="city-input">City</label>
+                <label htmlFor="city-input">{t('labelCity')}</label>
                 <input
                   id="city-input"
                   value={city}
                   onChange={(e) => onCityChange(e.target.value)}
-                  placeholder="Los Angeles"
+                  placeholder={t('phCity')}
                   autoComplete="off"
                   spellCheck={false}
                 />
@@ -127,23 +128,23 @@ export function SearchHero({
 
               <div className="field-row" style={{ marginTop: 16 }}>
                 <div className="field">
-                  <label htmlFor="state-input">State</label>
+                  <label htmlFor="state-input">{t('labelState')}</label>
                   <input
                     id="state-input"
                     value={state}
                     onChange={(e) => onStateChange(e.target.value)}
-                    placeholder="CA"
+                    placeholder={t('phState')}
                     autoComplete="off"
                     spellCheck={false}
                   />
                 </div>
                 <div className="field">
-                  <label htmlFor="fy-input">Fiscal Year</label>
+                  <label htmlFor="fy-input">{t('labelFiscalYear')}</label>
                   <input
                     id="fy-input"
                     value={fiscalYear}
                     onChange={(e) => onFiscalYearChange(e.target.value)}
-                    placeholder="FY 2024-25"
+                    placeholder={t('phFY')}
                     autoComplete="off"
                     spellCheck={false}
                   />
@@ -151,33 +152,28 @@ export function SearchHero({
               </div>
 
               <div className="form-footer">
-                <p className="form-footer__note">
-                  We'll use cached data if available &mdash; otherwise the agent
-                  runs a live scrape.
-                </p>
+                <p className="form-footer__note">{t('searchNote')}</p>
                 <button
                   type="submit"
                   className="btn"
                   disabled={isLoading || !city.trim() || !state.trim()}
                 >
                   {isLoading && <span className="spinner" aria-hidden />}
-                  {isLoading ? 'Reading…' : hasReport ? 'Load another' : 'Open the ledger'}
+                  {isLoading ? t('btnReading') : hasReport ? t('btnLoadAnother') : t('btnOpenLedger')}
                 </button>
               </div>
             </form>
           </fieldset>
 
           <fieldset className="search-fieldset search-fieldset--upload">
-            <legend className="search-fieldset__legend">Upload budget PDFs</legend>
+            <legend className="search-fieldset__legend">{t('uploadLegend')}</legend>
             <form className="search-card search-card--upload" onSubmit={handleUpload}>
               <p className="search-card__hint" style={{ marginTop: 0 }}>
-                Each file is a separate report. Use the <strong>City / State / Fiscal year</strong>{' '}
-                fields in each row only (not the search form above). Max 25&thinsp;MB per file. We try
-                to pre-fill rows from filenames like “City of … FY 2025-26 …”.
+                {t('uploadHint')}
               </p>
 
               <div className="field field--full" style={{ marginTop: 16 }}>
-                <label htmlFor="pdf-input">Budget PDFs</label>
+                <label htmlFor="pdf-input">{t('labelBudgetPdfs')}</label>
                 <input
                   id="pdf-input"
                   ref={pdfInputRef}
@@ -226,7 +222,7 @@ export function SearchHero({
                       </p>
                       <div className="field-row" style={{ marginTop: 0 }}>
                         <div className="field">
-                          <label htmlFor={`pdf-city-${index}`}>City</label>
+                          <label htmlFor={`pdf-city-${index}`}>{t('labelCity')}</label>
                           <input
                             id={`pdf-city-${index}`}
                             value={entry.city}
@@ -242,7 +238,7 @@ export function SearchHero({
                           />
                         </div>
                         <div className="field">
-                          <label htmlFor={`pdf-state-${index}`}>State</label>
+                          <label htmlFor={`pdf-state-${index}`}>{t('labelState')}</label>
                           <input
                             id={`pdf-state-${index}`}
                             value={entry.state}
@@ -258,7 +254,7 @@ export function SearchHero({
                           />
                         </div>
                         <div className="field">
-                          <label htmlFor={`pdf-fy-${index}`}>Fiscal Year</label>
+                          <label htmlFor={`pdf-fy-${index}`}>{t('labelFiscalYear')}</label>
                           <input
                             id={`pdf-fy-${index}`}
                             value={entry.fiscalYear}
@@ -269,7 +265,7 @@ export function SearchHero({
                                 rows.map((row, i) => (i === index ? { ...row, fiscalYear: v } : row)),
                               )
                             }}
-                            placeholder="FY 2024-25"
+                            placeholder={t('phFY')}
                             autoComplete="off"
                             spellCheck={false}
                           />
@@ -290,11 +286,7 @@ export function SearchHero({
               ) : null}
 
               <div className="form-footer">
-                <p className="form-footer__note">
-                  {pdfEntries.length
-                    ? `${pdfEntries.length} file${pdfEntries.length === 1 ? '' : 's'} ready.`
-                    : 'The agent will extract figures and map them to buckets.'}
-                </p>
+                <p className="form-footer__note">{uploadReadyNote}</p>
                 <div
                   style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}
                 >
@@ -305,7 +297,7 @@ export function SearchHero({
                       onClick={clearPdfSelection}
                       disabled={isUploading}
                     >
-                      Clear PDFs
+                      {t('btnClearPdfs')}
                     </button>
                   ) : null}
                   <button
@@ -315,10 +307,10 @@ export function SearchHero({
                   >
                     {isUploading && <span className="spinner" aria-hidden />}
                     {isUploading
-                      ? 'Reading PDFs…'
+                      ? t('btnReadingPdfs')
                       : pdfEntries.length > 1
-                        ? `Analyze ${pdfEntries.length} PDFs`
-                        : 'Analyze this PDF'}
+                        ? formatStr(t('btnAnalyzeMany'), { n: pdfEntries.length })
+                        : t('btnAnalyzeOne')}
                   </button>
                 </div>
               </div>

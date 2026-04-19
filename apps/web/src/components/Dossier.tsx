@@ -1,6 +1,8 @@
 import type { BudgetReport } from '../lib/types'
+import { bucketLabel } from '../i18n/buckets'
+import { useI18n } from '../i18n/I18nProvider'
 import type { DonutDenominator } from './BucketDonut'
-import { formatCurrency, formatNumber, formatPercent, perCapita } from '../lib/format'
+import { perCapita } from '../lib/format'
 import { formatFiscalYearDisplay } from '../lib/fiscal-year'
 import { downloadTextFile, reportToCsvRows } from '../lib/csv-export'
 import { BucketDonut } from './BucketDonut'
@@ -21,7 +23,10 @@ export function Dossier({
   donutDenominator,
   onDonutDenominatorChange,
 }: DossierProps) {
-  const status = fromCache ? 'From the archive' : 'Freshly filed'
+  const { locale, t, formatMessage, formatCurrency, formatPercent, formatNumber, formatDate } =
+    useI18n()
+
+  const status = fromCache ? t('dossierStatusArchive') : t('dossierStatusLive')
   const perResident = perCapita(report.totalBudget, report.population)
   const topBucket = [...report.buckets]
     .filter((b) => (b.amount ?? 0) > 0)
@@ -31,8 +36,7 @@ export function Dossier({
   const total = report.totalBudget
   const coverageRatio =
     total && total > 0 && sumMapped >= 0 ? Math.min(1, sumMapped / total) : null
-  const gap =
-    total && total > 0 ? Math.max(0, total - sumMapped) : null
+  const gap = total && total > 0 ? Math.max(0, total - sumMapped) : null
 
   const fyDisplay = formatFiscalYearDisplay(report.fiscalYearLabel)
 
@@ -42,6 +46,8 @@ export function Dossier({
       .slice(0, 80)
     downloadTextFile(`budget-buckets-${slug}.csv`, reportToCsvRows(report))
   }
+
+  const topLabel = topBucket ? bucketLabel(topBucket.key, locale) : t('dash')
 
   return (
     <section className="dossier fade-in">
@@ -59,46 +65,50 @@ export function Dossier({
           <div>
             <strong title={report.fiscalYearLabel}>{fyDisplay}</strong>
           </div>
-          <div>Report ID · {report.id.slice(0, 8).toUpperCase()}</div>
-          <div>Retrieved · {new Date(report.retrievedAt).toLocaleDateString()}</div>
+          <div>
+            {t('dossierReportId')} · {report.id.slice(0, 8).toUpperCase()}
+          </div>
+          <div>
+            {t('dossierRetrieved')} · {formatDate(report.retrievedAt)}
+          </div>
         </div>
       </div>
 
       <div className="stats-strip">
         <div className="stats-strip__cell">
-          <span className="stats-strip__label">Total Adopted Budget</span>
+          <span className="stats-strip__label">{t('labelTotalAdoptedBudget')}</span>
           <span className="stats-strip__value stats-strip__value--num">
             {formatCurrency(report.totalBudget, true)}
           </span>
           <span className="stats-strip__hint">
             {report.totalBudget
               ? formatCurrency(report.totalBudget, false)
-              : 'Value not extracted'}
+              : t('valueNotExtracted')}
           </span>
         </div>
         <div className="stats-strip__cell">
-          <span className="stats-strip__label">Population</span>
+          <span className="stats-strip__label">{t('labelPopulation')}</span>
           <span className="stats-strip__value stats-strip__value--num">
             {formatNumber(report.population)}
           </span>
-          <span className="stats-strip__hint">residents</span>
+          <span className="stats-strip__hint">{t('hintResidents')}</span>
         </div>
         <div className="stats-strip__cell">
-          <span className="stats-strip__label">Per Resident</span>
+          <span className="stats-strip__label">{t('labelPerResident')}</span>
           <span className="stats-strip__value stats-strip__value--num">
             {formatCurrency(perResident, false)}
           </span>
-          <span className="stats-strip__hint">budgeted per person</span>
+          <span className="stats-strip__hint">{t('hintBudgetedPerPerson')}</span>
         </div>
         <div className="stats-strip__cell">
-          <span className="stats-strip__label">Largest Bucket</span>
-          <span className="stats-strip__value">
-            {topBucket ? topBucket.label.split(' & ')[0] : '—'}
-          </span>
+          <span className="stats-strip__label">{t('labelLargestBucket')}</span>
+          <span className="stats-strip__value">{topLabel}</span>
           <span className="stats-strip__hint">
             {topBucket
-              ? `${formatCurrency(topBucket.amount, true)} allocated`
-              : 'No totals yet'}
+              ? formatMessage('hintAllocated', {
+                  amount: formatCurrency(topBucket.amount, true),
+                })
+              : t('hintNoTotalsYet')}
           </span>
         </div>
       </div>
@@ -106,50 +116,54 @@ export function Dossier({
       {total && total > 0 ? (
         <div className="coverage-banner">
           <div>
-            <strong>Coverage</strong>{' '}
+            <strong>{t('coverage')}</strong>{' '}
             <span className="coverage-banner__nums">
-              {formatCurrency(sumMapped, true)} mapped of {formatCurrency(total, true)} adopted
-              {coverageRatio !== null ? ` (${formatPercent(coverageRatio)} of total)` : ''}
+              {formatMessage('coverageMappedOf', {
+                mapped: formatCurrency(sumMapped, true),
+                total: formatCurrency(total, true),
+              })}
+              {coverageRatio !== null
+                ? formatMessage('coverageOfTotal', { pct: formatPercent(coverageRatio) })
+                : ''}
             </span>
           </div>
           {gap !== null && gap > 0 ? (
             <span className="coverage-banner__gap">
-              Unmapped: {formatCurrency(gap, true)} — shown as its own slice when using “adopted
-              total” mode.
+              {formatMessage('coverageUnmapped', { gap: formatCurrency(gap, true) })}
             </span>
           ) : (
-            <span className="coverage-banner__gap">Bucket sums match the adopted total.</span>
+            <span className="coverage-banner__gap">{t('coverageMatch')}</span>
           )}
         </div>
       ) : null}
 
       <div className="chart-toolbar">
-        <div className="chart-toolbar__group" role="group" aria-label="Donut percentage basis">
-          <span className="chart-toolbar__label">Ring shows</span>
+        <div className="chart-toolbar__group" role="group" aria-label={t('chartRingShows')}>
+          <span className="chart-toolbar__label">{t('chartRingShows')}</span>
           <button
             type="button"
             className={`btn btn--sm ${donutDenominator === 'adopted' ? '' : 'btn--ghost'}`}
             onClick={() => onDonutDenominatorChange('adopted')}
           >
-            % of adopted total
+            {t('chartPctAdopted')}
           </button>
           <button
             type="button"
             className={`btn btn--sm ${donutDenominator === 'mapped' ? '' : 'btn--ghost'}`}
             onClick={() => onDonutDenominatorChange('mapped')}
           >
-            % of extracted buckets
+            {t('chartPctMapped')}
           </button>
         </div>
         <button type="button" className="btn btn--sm btn--ghost" onClick={exportCsv}>
-          Export CSV
+          {t('btnExportCsv')}
         </button>
         <button
           type="button"
           className="btn btn--sm btn--ghost"
           onClick={() => window.print()}
         >
-          Print / save as PDF
+          {t('btnPrint')}
         </button>
       </div>
 
@@ -161,30 +175,27 @@ export function Dossier({
         />
 
         <aside className="chart-sidenote">
-          <div className="chart-sidenote__fig">Fig. 1 — Allocation by bucket</div>
+          <div className="chart-sidenote__fig">{t('chartFig')}</div>
           <p className="chart-sidenote__text">
-            Every dollar the city adopted was sorted into one of nine civic
-            buckets.{' '}
+            {t('dossierChartIntro')}
             {topBucket && (
               <>
-                <strong>{topBucket.label}</strong> leads the ledger at{' '}
-                <strong>{formatCurrency(topBucket.amount, true)}</strong>,
-                roughly <strong>{Math.round((topBucket.share ?? 0) * 100)}%</strong>{' '}
-                of the adopted total.
+                <strong>{bucketLabel(topBucket.key, locale)}</strong>
+                {formatMessage('dossierChartAfterLabel', {
+                  amount: formatCurrency(topBucket.amount, true),
+                  pct: String(Math.round((topBucket.share ?? 0) * 100)),
+                })}
               </>
             )}
           </p>
-          <div className="chart-sidenote__citation">
-            Hover any slice for details · Switch “ring shows” if bucket totals do not sum to the
-            adopted figure
-          </div>
+          <div className="chart-sidenote__citation">{t('chartSidenoteCitation')}</div>
         </aside>
       </div>
 
       <SourcesBlock report={report} fromCache={fromCache} />
 
       <div style={{ marginTop: 32 }}>
-        <SectionHeading num="02" eyebrow="Bucket Detail" title="What every bucket holds" />
+        <SectionHeading num="02" eyebrow={t('section02Eyebrow')} title={t('section02Title')} />
       </div>
 
       <BucketGrid buckets={report.buckets} />

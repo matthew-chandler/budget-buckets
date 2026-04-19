@@ -1,6 +1,6 @@
+import { useI18n } from '../i18n/I18nProvider'
 import type { BudgetReport } from '../lib/types'
 import { isHttpUrl } from '../lib/api'
-import { formatDate } from '../lib/format'
 
 interface SourcesBlockProps {
   report: BudgetReport
@@ -8,33 +8,32 @@ interface SourcesBlockProps {
 }
 
 export function SourcesBlock({ report, fromCache }: SourcesBlockProps) {
+  const { t, formatDate, formatMessage } = useI18n()
+
   const fromPdf =
     !fromCache &&
     !report.sourceUrl &&
     Boolean(report.sourceNotes?.toLowerCase().includes('upload'))
 
   const provenance = fromCache
-    ? 'Loaded from our cached ledger — last updated ' + formatDate(report.updatedAt)
+    ? formatMessage('provenanceCache', { date: formatDate(report.updatedAt) })
     : fromPdf
-    ? 'Extracted from the PDF you uploaded'
-    : 'Freshly scraped by a Pi agent'
+      ? t('provenancePdf')
+      : t('provenanceFresh')
 
   return (
     <div className="sources">
       <div>
-        <p className="sources__lede">
-          {report.summary ??
-            'No editorial summary was extracted for this report. The citations and category mapping below are still authoritative.'}
-        </p>
+        <p className="sources__lede">{report.summary ?? t('sourcesNoSummary')}</p>
       </div>
 
       <dl className="sources__meta">
         <div className="pair">
-          <dt>Provenance</dt>
+          <dt>{t('sourcesProvenance')}</dt>
           <dd>{provenance}</dd>
         </div>
         <div className="pair">
-          <dt>Source</dt>
+          <dt>{t('sourcesSource')}</dt>
           <dd>
             {report.sourceUrl && isHttpUrl(report.sourceUrl) ? (
               <a href={report.sourceUrl} target="_blank" rel="noreferrer">
@@ -43,7 +42,7 @@ export function SourcesBlock({ report, fromCache }: SourcesBlockProps) {
             ) : report.sourceTitle ? (
               report.sourceTitle
             ) : (
-              'No official source URL captured.'
+              t('sourcesNoUrl')
             )}
             {report.sourceNotes ? (
               <div
@@ -59,7 +58,7 @@ export function SourcesBlock({ report, fromCache }: SourcesBlockProps) {
           </dd>
         </div>
         <div className="pair">
-          <dt>Citations</dt>
+          <dt>{t('sourcesCitations')}</dt>
           <dd>
             {report.citations.length ? (
               <ol className="citations-list">
@@ -77,9 +76,7 @@ export function SourcesBlock({ report, fromCache }: SourcesBlockProps) {
                 ))}
               </ol>
             ) : (
-              <span style={{ color: 'var(--ink-60)' }}>
-                No individual citations were extracted.
-              </span>
+              <span style={{ color: 'var(--ink-60)' }}>{t('sourcesNoCitations')}</span>
             )}
           </dd>
         </div>
