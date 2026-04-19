@@ -316,10 +316,6 @@ export async function getBudgetHistory(input: {
 }
 
 export async function searchKnownCities(query: string): Promise<SearchResult[]> {
-  if (!query.trim()) {
-    return []
-  }
-
   return searchCities(query)
 }
 

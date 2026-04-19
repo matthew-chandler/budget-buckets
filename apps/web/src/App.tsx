@@ -7,10 +7,13 @@ import type {
   CompareResponse,
   HistoryResponse,
   ResolveResponse,
+  SearchResponse,
+  SearchResult,
 } from './lib/types'
 
 import { Masthead } from './components/Masthead'
 import { SearchHero } from './components/SearchHero'
+import { Archive } from './components/Archive'
 import { Dossier } from './components/Dossier'
 import { Comparison } from './components/Comparison'
 import { HistorySection } from './components/HistorySection'
@@ -44,6 +47,11 @@ export default function App() {
     }
   }, [activeReport?.id])
 
+  const archiveQuery = useQuery({
+    queryKey: ['archive'],
+    queryFn: () => apiFetch<SearchResponse>('/api/search?q='),
+  })
+
   const historyQuery = useQuery({
     queryKey: [
       'history',
@@ -71,8 +79,25 @@ export default function App() {
     onSuccess: (data) => {
       setActiveReport(data.report)
       setActiveFromCache(data.fromCache)
+      archiveQuery.refetch()
     },
   })
+
+  const [archiveSelecting, setArchiveSelecting] = useState<string | null>(null)
+
+  const handleArchiveSelect = (r: SearchResult) => {
+    const key = `${r.city}|${r.state}`
+    setArchiveSelecting(key)
+    setCity(r.city)
+    setState(r.state)
+    setFiscalYear('')
+    resolveMutation.mutate(
+      { city: r.city, state: r.state, fiscalYear: null },
+      {
+        onSettled: () => setArchiveSelecting(null),
+      },
+    )
+  }
 
   const uploadPdfMutation = useMutation({
     mutationFn: (file: File) => {
@@ -92,6 +117,7 @@ export default function App() {
     onSuccess: (data) => {
       setActiveReport(data.report)
       setActiveFromCache(data.fromCache)
+      archiveQuery.refetch()
     },
   })
 
@@ -179,6 +205,17 @@ export default function App() {
             <p>{uploadPdfMutation.error.message}</p>
           </div>
         ) : null}
+
+        <Archive
+          results={archiveQuery.data?.results ?? []}
+          isLoading={archiveQuery.isLoading}
+          isSelecting={resolveMutation.isPending && archiveSelecting !== null}
+          selectingKey={archiveSelecting}
+          activeKey={
+            activeReport ? `${activeReport.city}|${activeReport.state}` : null
+          }
+          onSelect={handleArchiveSelect}
+        />
 
         <div id="dossier-anchor" />
 

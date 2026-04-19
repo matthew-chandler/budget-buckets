@@ -85,3 +85,15 @@ export interface ChatResponse {
   answer: string
   citations: Citation[]
 }
+
+export interface SearchResult {
+  city: string
+  state: string
+  displayName: string
+  latestFiscalYearLabel: string
+  updatedAt: string
+}
+
+export interface SearchResponse {
+  results: SearchResult[]
+}
