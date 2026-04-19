@@ -54,6 +54,98 @@ export interface PdfPageRangeExtract {
   truncated: boolean
 }
 
+/** One rasterized PDF page as PNG (base64), for vision-capable models. */
+export interface PdfPageImagePng {
+  mimeType: 'image/png'
+  data: string
+  page: number
+  width: number
+  height: number
+}
+
+async function runPymupdfRenderPage(request: Record<string, unknown>): Promise<PdfPageImagePng> {
+  const script = `
+import base64
+import json
+import sys
+
+import fitz
+
+req = json.loads(sys.stdin.read())
+path = req["path"]
+page1 = int(req["page"])
+scale = float(req.get("scale", 2.0))
+max_side = int(req.get("maxSide", 2000))
+
+doc = fitz.open(path)
+try:
+    if page1 < 1 or page1 > doc.page_count:
+        raise ValueError("page out of range")
+    page = doc.load_page(page1 - 1)
+    rect = page.rect
+    tw = rect.width * scale
+    th = rect.height * scale
+    if max(tw, th) > max_side:
+        scale *= max_side / max(tw, th)
+    mat = fitz.Matrix(scale, scale)
+    pix = page.get_pixmap(matrix=mat, alpha=False)
+    png = pix.tobytes("png")
+    out = {
+        "mimeType": "image/png",
+        "data": base64.b64encode(png).decode("ascii"),
+        "page": page1,
+        "width": pix.width,
+        "height": pix.height,
+    }
+    print(json.dumps(out))
+finally:
+    doc.close()
+`.trim()
+
+  const child = spawn('python3', ['-c', script], {
+    stdio: ['pipe', 'pipe', 'pipe'],
+  })
+
+  const stdoutChunks: Buffer[] = []
+  const stderrChunks: Buffer[] = []
+
+  child.stdout.on('data', (chunk: Buffer) => stdoutChunks.push(chunk))
+  child.stderr.on('data', (chunk: Buffer) => stderrChunks.push(chunk))
+  child.stdin.end(JSON.stringify(request), 'utf8')
+
+  await new Promise<void>((resolve, reject) => {
+    child.on('error', reject)
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve()
+        return
+      }
+
+      reject(
+        new Error(
+          `PDF render failed: ${Buffer.concat(stderrChunks).toString('utf8') || `exit code ${code}`}`,
+        ),
+      )
+    })
+  })
+
+  return JSON.parse(Buffer.concat(stdoutChunks).toString('utf8')) as PdfPageImagePng
+}
+
+/** Rasterize a single PDF page to PNG (PyMuPDF). Requires: pip install pymupdf */
+export async function renderPdfPagePng(
+  pdfPath: string,
+  page: number,
+  options?: { scale?: number; maxSide?: number },
+): Promise<PdfPageImagePng> {
+  return runPymupdfRenderPage({
+    path: pdfPath,
+    page,
+    scale: options?.scale ?? 2,
+    maxSide: options?.maxSide ?? 2000,
+  })
+}
+
 async function runPypdfRpc(request: Record<string, unknown>): Promise<unknown> {
   const script = `
 import json

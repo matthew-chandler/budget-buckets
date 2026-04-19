@@ -14,6 +14,7 @@ import {
   extractPdfTextPageRange,
   readDocument,
   readPdfDocumentInfo,
+  renderPdfPagePng,
 } from './document-reader.js'
 import type {
   BudgetReport,
@@ -33,16 +34,17 @@ You are Budget Buckets' municipal budget analysis agent.
 Your job:
 1. Call pdf_document_info on the absolute PDF path in the user message to learn page count and document metadata.
 2. Call pdf_extract_text one or more times on page ranges that contain the adopted budget figures you need (summary tables, functional/expenditure breakdowns, all-funds totals). Prefer targeted ranges over reading the entire document when the PDF is long.
-3. Use only text returned from those tools to bucket spending into the standardized buckets below.
+3. When extracted text is empty, garbled, or clearly mis-ordered for wide tables or chart-heavy pages, call pdf_render_page on specific 1-based page numbers. The tool returns a PNG image in the tool result; use your vision capabilities to read numbers and labels from that page.
+4. Use text from pdf_extract_text plus anything you read from pdf_render_page images to bucket spending into the standardized buckets below.
 
 Hard rules:
-- Use pdf_document_info and pdf_extract_text only with the pdfPath given in the user message. Do not browse the web or use any other source.
+- Use pdf_document_info, pdf_extract_text, and pdf_render_page only with the pdfPath given in the user message. Do not browse the web or use any other source.
 - Do not inspect the environment, list directories, or run shell commands.
 - Never invent a number, citation, or category. Missing fields must be null or [].
 - Return JSON only. No markdown, no explanation, no code fences.
 - For citations tied to the uploaded PDF, set "url" to "user-upload" and describe the page, table, or section in "title" and "note".
 
-Stop once you have enough extracted text to justify the JSON.
+Stop once you have enough evidence from text and/or rendered pages to justify the JSON.
 `.trim()
 
 const SCRAPER_SYSTEM_PROMPT = `
@@ -200,6 +202,58 @@ const pdfExtractTextTool = defineTool({
   },
 })
 
+const pdfRenderPageTool = defineTool({
+  name: 'pdf_render_page',
+  label: 'PDF render page',
+  description:
+    'Rasterize one PDF page to a PNG image attached to the tool result (like the read tool for images). Use for dense tables, scans, or when pdf_extract_text is unusable.',
+  promptSnippet:
+    'pdf_render_page(pdfPath, page, scale?, maxSide?) returns a PNG for vision; page is 1-based.',
+  promptGuidelines: [
+    'Prefer pdf_extract_text for machine-readable text; use pdf_render_page when you need the visual layout.',
+    'Render one page per call. Pick the smallest scale that keeps tables legible if context is tight.',
+    'Use only the pdfPath supplied in the user message.',
+  ],
+  parameters: Type.Object({
+    pdfPath: Type.String({
+      description: 'Absolute path to the PDF on the server (must match the path from the user message).',
+    }),
+    page: Type.Number({ description: '1-based page index to render.' }),
+    scale: Type.Optional(
+      Type.Number({
+        description:
+          'Render scale factor before maxSide clamp (default 2). Lower (e.g. 1.25) for huge pages.',
+      }),
+    ),
+    maxSide: Type.Optional(
+      Type.Number({
+        description: 'Maximum width or height in pixels after scaling (default 2000).',
+      }),
+    ),
+  }) as any,
+  async execute(_toolCallId, params: any) {
+    const pdfPath = String(params.pdfPath ?? '').trim()
+    const page = Math.max(1, Math.floor(Number(params.page)))
+    const scale = params.scale !== undefined ? Number(params.scale) : undefined
+    const maxSide = params.maxSide !== undefined ? Math.floor(Number(params.maxSide)) : undefined
+
+    const image = await renderPdfPagePng(pdfPath, page, { scale, maxSide })
+    const note = `Rendered PDF page ${image.page} as PNG (${image.width}x${image.height}). Read tables and figures from the attached image.`
+
+    return {
+      content: [
+        { type: 'text', text: note },
+        { type: 'image', data: image.data, mimeType: image.mimeType },
+      ],
+      details: {
+        page: image.page,
+        width: image.width,
+        height: image.height,
+      },
+    }
+  },
+})
+
 const browserCommandTool = defineTool({
   name: 'browser_command',
   label: 'Browser Command',
@@ -340,6 +394,11 @@ function summarizeToolArgs(args: unknown) {
     return ` pdfPath=${JSON.stringify(pdfPath)} pages=${firstPage}-${lastPage}`
   }
 
+  const page = 'page' in args && typeof args.page === 'number' ? args.page : null
+  if (pdfPath && page != null) {
+    return ` pdfPath=${JSON.stringify(pdfPath)} page=${page}`
+  }
+
   if (pdfPath) {
     return ` pdfPath=${JSON.stringify(pdfPath)}`
   }
@@ -457,7 +516,7 @@ export async function scrapeBudgetFromUploadedPdfWithPi(input: {
     const result = await createFireworksAgentSession({
       cwd,
       tools: [],
-      customTools: [pdfDocumentInfoTool, pdfExtractTextTool],
+      customTools: [pdfDocumentInfoTool, pdfExtractTextTool, pdfRenderPageTool],
     })
     agentDir = result.agentDir
     const { session, modelFallbackMessage } = result
@@ -530,8 +589,9 @@ Bucket keys:
 Required workflow:
 1. Call pdf_document_info with pdfPath="${input.pdfPath}".
 2. Call pdf_extract_text with the same pdfPath for the page ranges that contain adopted budget totals and functional or departmental spending suitable for bucketing. Make additional calls if you need more sections.
-3. Extract only supported figures from the returned text.
-4. Return only JSON.
+3. If needed, call pdf_render_page for specific pages where vision will help (broken text extraction, wide tables, or scan-like pages).
+4. Extract only supported figures from the returned text and/or rendered pages.
+5. Return only JSON.
 `.trim()
 
     await session.prompt(prompt, { expandPromptTemplates: false })
