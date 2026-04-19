@@ -22,6 +22,7 @@ export interface Citation {
   url: string
   note?: string | null
   appliesToBucketKey?: BucketKey | null
+  page?: number | null
 }
 
 export interface BucketAllocation {
@@ -34,6 +35,7 @@ export interface BucketAllocation {
   rawCategories: string[]
   citationUrl?: string | null
   citationTitle?: string | null
+  citationPage?: number | null
 }
 
 export interface RawCategory {
@@ -62,6 +64,7 @@ export interface BudgetReport {
   citations: Citation[]
   retrievedAt: string
   updatedAt: string
+  hasSourcePdf?: boolean
 }
 
 export interface ResolveResponse {

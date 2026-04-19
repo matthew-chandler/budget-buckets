@@ -22,13 +22,14 @@ export function reportToCsvRows(report: BudgetReport): string {
     lines.push([k, v].map(escapeCsvCell).join(','))
   }
   lines.push('')
-  lines.push(['Bucket', 'Amount USD', 'Share of total'].map(escapeCsvCell).join(','))
+  lines.push(['Bucket', 'Amount USD', 'Share of total', 'Source page'].map(escapeCsvCell).join(','))
   for (const b of report.buckets) {
     lines.push(
       [
         b.label,
         b.amount?.toString() ?? '',
         b.share != null ? (b.share * 100).toFixed(2) + '%' : '',
+        b.citationPage != null ? String(b.citationPage) : '',
       ]
         .map(escapeCsvCell)
         .join(','),

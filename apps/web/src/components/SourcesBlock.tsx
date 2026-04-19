@@ -71,6 +71,12 @@ export function SourcesBlock({ report, fromCache }: SourcesBlockProps) {
                     ) : (
                       <span>{citation.title}</span>
                     )}
+                    {citation.page != null ? (
+                      <span className="citations-list__page">
+                        {' '}
+                        ({formatMessage('citationPageSuffix', { page: citation.page })})
+                      </span>
+                    ) : null}
                     {citation.note ? <span>{citation.note}</span> : null}
                   </li>
                 ))}

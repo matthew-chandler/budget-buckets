@@ -104,6 +104,11 @@ export const en = {
   section02Eyebrow: 'Bucket Detail',
   section02Title: 'What every bucket holds',
   bucketNoSummary: 'No summary extracted for this bucket.',
+  bucketSourcePage: 'Source · page {page}',
+  btnDownloadSourcePdf: 'Download source PDF',
+  btnOpenSourcePdf: 'Open source PDF',
+  sourcePdfVerifyHint:
+    'Open the original document to verify tables, footnotes, and page references.',
 
   compareEyebrow: 'City vs City',
   compareTitle: 'Line them up, side by side',
@@ -197,6 +202,7 @@ export const en = {
   sourcesCitations: 'Citations',
   sourcesNoCitations: 'No individual citations were extracted.',
   sourcesNoUrl: 'No official source URL captured.',
+  citationPageSuffix: 'p. {page}',
   provenanceCache: 'Loaded from our cached ledger — last updated {date}',
   provenancePdf: 'Extracted from the PDF you uploaded',
   provenanceFresh: 'Freshly scraped by a Pi agent',
@@ -317,6 +323,11 @@ export const es: { [K in UIStringKey]: string } = {
   section02Eyebrow: 'Detalle de categorías',
   section02Title: 'Qué incluye cada categoría',
   bucketNoSummary: 'No se extrajo resumen para esta categoría.',
+  bucketSourcePage: 'Fuente · página {page}',
+  btnDownloadSourcePdf: 'Descargar PDF de la fuente',
+  btnOpenSourcePdf: 'Abrir PDF de la fuente',
+  sourcePdfVerifyHint:
+    'Abra el documento original para comprobar tablas, notas al pie y referencias de página.',
 
   compareEyebrow: 'Ciudad vs ciudad',
   compareTitle: 'Póngalas una al lado de la otra',
@@ -410,6 +421,7 @@ export const es: { [K in UIStringKey]: string } = {
   sourcesCitations: 'Citas',
   sourcesNoCitations: 'No se extrajeron citas individuales.',
   sourcesNoUrl: 'No se capturó URL oficial.',
+  citationPageSuffix: 'p. {page}',
   provenanceCache: 'Cargado desde nuestra caché — última actualización {date}',
   provenancePdf: 'Extraído del PDF que subió',
   provenanceFresh: 'Rastreado en vivo por un agente Pi',
@@ -521,6 +533,10 @@ export const zh: { [K in UIStringKey]: string } = {
   section02Eyebrow: '类别明细',
   section02Title: '每个类别包含什么',
   bucketNoSummary: '未提取该类别的摘要。',
+  bucketSourcePage: '来源 · 第 {page} 页',
+  btnDownloadSourcePdf: '下载来源 PDF',
+  btnOpenSourcePdf: '打开来源 PDF',
+  sourcePdfVerifyHint: '请打开原始文件以核对表格、脚注与页码引用。',
 
   compareEyebrow: '城市对比',
   compareTitle: '并排对照',
@@ -613,6 +629,7 @@ export const zh: { [K in UIStringKey]: string } = {
   sourcesCitations: '引用',
   sourcesNoCitations: '未提取单独引用条目。',
   sourcesNoUrl: '未捕获官方来源网址。',
+  citationPageSuffix: '第 {page} 页',
   provenanceCache: '从本地缓存载入 — 最后更新 {date}',
   provenancePdf: '从您上传的 PDF 提取',
   provenanceFresh: '由 Pi 智能体实时抓取',

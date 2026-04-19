@@ -8,7 +8,7 @@ interface BucketGridProps {
 }
 
 export function BucketGrid({ buckets }: BucketGridProps) {
-  const { locale, t, formatCurrency, formatPercent } = useI18n()
+  const { locale, t, formatCurrency, formatPercent, formatMessage } = useI18n()
 
   return (
     <div className="bucket-grid">
@@ -33,6 +33,12 @@ export function BucketGrid({ buckets }: BucketGridProps) {
             <p className="bucket-card__summary">
               {bucket.summary ?? t('bucketNoSummary')}
             </p>
+
+            {bucket.citationPage != null ? (
+              <p className="bucket-card__page">
+                {formatMessage('bucketSourcePage', { page: bucket.citationPage })}
+              </p>
+            ) : null}
 
             {bucket.rawCategories.length ? (
               <div className="bucket-card__tags">

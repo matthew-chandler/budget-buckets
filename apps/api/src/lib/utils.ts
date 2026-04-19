@@ -105,6 +105,14 @@ export function parseOptionalNumber(value: unknown): number | null {
   return null
 }
 
+/** 1-based PDF / printed page number when the model returns a positive integer. */
+export function parseOptionalPage(value: unknown): number | null {
+  const n = parseOptionalNumber(value)
+  if (n === null) return null
+  const page = Math.round(n)
+  return page >= 1 ? page : null
+}
+
 export function parseFiscalYearSort(label: string | null | undefined): number | null {
   if (!label) {
     return null

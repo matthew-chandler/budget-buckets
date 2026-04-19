@@ -1,6 +1,7 @@
 import type { BudgetReport } from '../lib/types'
 import { bucketLabel } from '../i18n/buckets'
 import { useI18n } from '../i18n/I18nProvider'
+import { isHttpUrl, isLikelyPdfUrl, reportSourcePdfDownloadUrl } from '../lib/api'
 import type { DonutDenominator } from './BucketDonut'
 import { perCapita } from '../lib/format'
 import { formatFiscalYearDisplay } from '../lib/fiscal-year'
@@ -48,6 +49,11 @@ export function Dossier({
   }
 
   const topLabel = topBucket ? bucketLabel(topBucket.key, locale) : t('dash')
+
+  const sourceUrl = report.sourceUrl?.trim() ?? ''
+  const canDownloadStoredPdf = Boolean(report.hasSourcePdf)
+  const canOpenRemotePdf =
+    !canDownloadStoredPdf && Boolean(sourceUrl && isHttpUrl(sourceUrl) && isLikelyPdfUrl(sourceUrl))
 
   return (
     <section className="dossier fade-in">
@@ -158,6 +164,20 @@ export function Dossier({
         <button type="button" className="btn btn--sm btn--ghost" onClick={exportCsv}>
           {t('btnExportCsv')}
         </button>
+        {canDownloadStoredPdf ? (
+          <a
+            className="btn btn--sm btn--ghost"
+            href={reportSourcePdfDownloadUrl(report.id)}
+            rel="noreferrer"
+          >
+            {t('btnDownloadSourcePdf')}
+          </a>
+        ) : null}
+        {canOpenRemotePdf ? (
+          <a className="btn btn--sm btn--ghost" href={sourceUrl} target="_blank" rel="noreferrer">
+            {t('btnOpenSourcePdf')}
+          </a>
+        ) : null}
         <button
           type="button"
           className="btn btn--sm btn--ghost"
@@ -166,6 +186,9 @@ export function Dossier({
           {t('btnPrint')}
         </button>
       </div>
+      {canDownloadStoredPdf || canOpenRemotePdf ? (
+        <p className="chart-toolbar__hint">{t('sourcePdfVerifyHint')}</p>
+      ) : null}
 
       <div className="chart-lede">
         <BucketDonut

@@ -37,12 +37,14 @@ import type {
   SearchResult,
   ScrapedBudgetPayload,
 } from './types.js'
+import { deleteSourcePdf, sourcePdfExists, writeSourcePdf } from './source-pdf-storage.js'
 import {
   formatDisplayName,
   normalizeCity,
   normalizeState,
   parseFiscalYearSort,
   parseOptionalNumber,
+  parseOptionalPage,
   slugify,
 } from './utils.js'
 
@@ -80,6 +82,7 @@ function normalizeCitations(
       url: citation.url.trim(),
       note: citation.note ?? null,
       appliesToBucketKey: normalizeBucketKey(citation.appliesToBucketKey),
+      page: parseOptionalPage(citation.page),
     }))
 
   if (source?.title && source.url) {
@@ -90,6 +93,7 @@ function normalizeCitations(
         url: source.url,
         note: source.notes ?? null,
         appliesToBucketKey: null,
+        page: null,
       })
     }
   }
@@ -120,6 +124,7 @@ function normalizeBuckets(
             rawCategories: bucket.rawCategories ?? [],
             citationUrl: bucket.citationUrl ?? null,
             citationTitle: bucket.citationTitle ?? null,
+            citationPage: parseOptionalPage(bucket.citationPage),
           },
         ] as const
       })
@@ -154,6 +159,7 @@ function normalizeBuckets(
               .map((category) => category.name),
       citationUrl: scrapedBucket?.citationUrl ?? bucketCitation?.url ?? null,
       citationTitle: scrapedBucket?.citationTitle ?? bucketCitation?.title ?? null,
+      citationPage: scrapedBucket?.citationPage ?? bucketCitation?.page ?? null,
     }
   })
 }
@@ -228,7 +234,7 @@ export async function resolveBudgetReport(input: {
 
   if (existing) {
     return {
-      report: existing,
+      report: toClientReport(existing),
       bucketDefinitions,
       fromCache: true,
     }
@@ -248,11 +254,12 @@ export async function resolveBudgetReport(input: {
   })
 
   const report = await upsertBudgetReport(normalized)
+  await deleteSourcePdf(report.id)
   deleteReportTranslationsForReport(report.id)
   queueReportTranslations(report.id)
 
   return {
-    report,
+    report: toClientReport(report),
     bucketDefinitions,
     fromCache: false,
   }
@@ -292,11 +299,12 @@ export async function resolveBudgetReportFromUploadedPdf(input: {
     })
 
     const report = await upsertBudgetReport(normalized)
+    await writeSourcePdf(report.id, input.pdfBuffer)
     deleteReportTranslationsForReport(report.id)
     queueReportTranslations(report.id)
 
     return {
-      report,
+      report: toClientReport(report),
       bucketDefinitions,
       fromCache: false,
     }
@@ -328,8 +336,9 @@ export async function getBudgetHistory(input: {
   const citySlug = slugify(normalizeCity(input.city))
   const stateSlug = slugify(normalizeState(input.state))
 
+  const rows = await listBudgetReportsForCity(citySlug, stateSlug)
   return {
-    reports: await listBudgetReportsForCity(citySlug, stateSlug),
+    reports: rows.map(toClientReport),
     bucketDefinitions,
   }
 }
@@ -340,7 +349,10 @@ export async function searchKnownCities(query: string): Promise<SearchResult[]> 
 
 function toClientReport(p: PersistedBudgetReport): BudgetReport {
   const { citySlug: _cs, stateSlug: _ss, ...rest } = p
-  return rest
+  return {
+    ...rest,
+    hasSourcePdf: sourcePdfExists(p.id),
+  }
 }
 
 export async function getLocalizedBudgetReport(

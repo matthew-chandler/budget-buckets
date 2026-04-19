@@ -1,8 +1,10 @@
+import { readFile } from 'node:fs/promises'
 import { serve } from '@hono/node-server'
 import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { z } from 'zod'
+import { sourcePdfExists, sourcePdfPath } from './lib/source-pdf-storage.js'
 import {
   bucketDefinitions,
   chatAboutBudget,
@@ -66,6 +68,23 @@ app.get('/api/search', async (c) => {
 app.post('/api/reports/resolve', zValidator('json', resolveSchema), async (c) => {
   const body = c.req.valid('json')
   return c.json(await resolveBudgetReport(body))
+})
+
+app.get('/api/reports/source-pdf', async (c) => {
+  const id = c.req.query('id')?.trim()
+  if (!id) {
+    return c.json({ error: 'Query parameter id is required.' }, 400)
+  }
+  if (!sourcePdfExists(id)) {
+    return c.json({ error: 'No PDF on file for this report.' }, 404)
+  }
+  const buf = await readFile(sourcePdfPath(id))
+  const safe = id.replace(/[^\w-]+/g, '_').slice(0, 64) || 'report'
+  return c.body(buf, 200, {
+    'Content-Type': 'application/pdf',
+    'Content-Disposition': `attachment; filename="budget-buckets-${safe}.pdf"`,
+    'Cache-Control': 'private, max-age=86400',
+  })
 })
 
 app.get('/api/reports/localized', async (c) => {

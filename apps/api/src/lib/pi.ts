@@ -44,6 +44,7 @@ Hard rules:
 - Never invent a number, citation, or category. Missing fields must be null or [].
 - Return JSON only. No markdown, no explanation, no code fences.
 - For citations tied to the uploaded PDF, set "url" to "user-upload" and describe the page, table, or section in "title" and "note".
+- For every bucket, set "citationPage" to the single best 1-based PDF page number where that bucket’s adopted-budget figures appear (the page you relied on from pdf_extract_text or pdf_render_page). Use null only if you cannot point to a specific page.
 
 Stop once you have enough evidence from text and/or rendered pages to justify the JSON.
 `.trim()
@@ -67,6 +68,7 @@ Hard rules:
 - Missing fields are allowed and should be null or [].
 - Return JSON only. No markdown, no explanation, no code fences.
 - If multiple official budget docs exist, prefer the most recent adopted budget for the requested fiscal year.
+- When the source is a PDF, set "citationPage" on each bucket to the 1-based page where that bucket’s figures appear, and include "page" on citations when you can name the printed page.
 - Stop once you have enough evidence to produce the JSON.
 `.trim()
 
@@ -662,7 +664,8 @@ Return this JSON shape exactly:
       "summary": string | null,
       "rawCategories": string[],
       "citationUrl": string | null,
-      "citationTitle": string | null
+      "citationTitle": string | null,
+      "citationPage": number | null
     }
   ],
   "rawCategories": [
@@ -678,7 +681,8 @@ Return this JSON shape exactly:
       "title": string,
       "url": string,
       "note": string | null,
-      "appliesToBucketKey": string | null
+      "appliesToBucketKey": string | null,
+      "page": number | null
     }
   ]
 }
@@ -770,7 +774,8 @@ Return this JSON shape exactly:
       "summary": string | null,
       "rawCategories": string[],
       "citationUrl": string | null,
-      "citationTitle": string | null
+      "citationTitle": string | null,
+      "citationPage": number | null
     }
   ],
   "rawCategories": [
@@ -786,7 +791,8 @@ Return this JSON shape exactly:
       "title": string,
       "url": string,
       "note": string | null,
-      "appliesToBucketKey": string | null
+      "appliesToBucketKey": string | null,
+      "page": number | null
     }
   ]
 }

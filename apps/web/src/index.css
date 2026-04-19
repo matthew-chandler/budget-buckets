@@ -542,6 +542,14 @@ strong {
   margin-right: 4px;
 }
 
+.chart-toolbar__hint {
+  font-size: 0.82rem;
+  color: var(--ink-60);
+  margin: 0 0 16px;
+  line-height: 1.45;
+  max-width: 52rem;
+}
+
 .compare-select {
   width: 100%;
   font: inherit;
@@ -1227,6 +1235,14 @@ textarea.field-textarea:focus {
   margin-top: auto;
 }
 
+.bucket-card__page {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: var(--ink-60);
+  margin: 0;
+}
+
 .bucket-card__tags {
   display: flex;
   flex-wrap: wrap;
@@ -1357,6 +1373,13 @@ textarea.field-textarea:focus {
   color: var(--ink-60);
   font-size: 0.82rem;
   margin-top: 3px;
+}
+
+.citations-list span.citations-list__page {
+  display: inline;
+  margin-top: 0;
+  margin-left: 0.15em;
+  font-size: 0.88rem;
 }
 
 /* =========================================================

@@ -5,6 +5,8 @@ export interface Citation {
   url: string
   note?: string | null
   appliesToBucketKey?: BucketKey | null
+  /** 1-based page in the source PDF or document, when known. */
+  page?: number | null
 }
 
 export interface RawCategory {
@@ -24,6 +26,8 @@ export interface BucketAllocation {
   rawCategories: string[]
   citationUrl?: string | null
   citationTitle?: string | null
+  /** 1-based page in the source document where this bucket’s figures appear, when known. */
+  citationPage?: number | null
 }
 
 export interface BudgetReport {
@@ -45,6 +49,8 @@ export interface BudgetReport {
   citations: Citation[]
   retrievedAt: string
   updatedAt: string
+  /** True when the API has a copy of the uploaded PDF for this report id. */
+  hasSourcePdf?: boolean
 }
 
 export interface CompareResponse {
@@ -99,6 +105,7 @@ export interface ScrapedBudgetPayload {
     rawCategories: string[]
     citationUrl?: string | null
     citationTitle?: string | null
+    citationPage?: number | null
   }>
   rawCategories: Array<{
     name: string
@@ -111,5 +118,6 @@ export interface ScrapedBudgetPayload {
     url: string
     note?: string | null
     appliesToBucketKey?: string | null
+    page?: number | null
   }>
 }
