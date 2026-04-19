@@ -161,6 +161,34 @@ export const en = {
   footerTransparencyTitle: 'Transparency',
   footerTransparencyBody:
     'Every figure links back to a cited source. Disagree with the bucket mapping? That’s fair — this is a journalistic tool, not the accounting of record.',
+  footerPrivacyLink: 'Privacy policy',
+
+  privacyEyebrow: 'Legal',
+  privacyTitle: 'Privacy policy',
+  privacyUpdated: 'Last updated: April 19, 2026',
+  privacyIntro:
+    'Budget Buckets helps you explore public municipal budgets. This page describes what information the service may process when you use it and how we think about privacy in plain terms. It is not legal advice.',
+  privacyCollectTitle: 'What we process',
+  privacyCollectBody:
+    'When you search for a city, upload budget PDFs, run comparisons, load history, or ask the chat a question, your browser sends the inputs needed for that action to our servers (for example city, state, fiscal year, file bytes for uploads, and your question text). Standard server and network logs may include IP address, timestamps, and request metadata. We do not ask you to create an account for this demo.',
+  privacyUseTitle: 'How we use it',
+  privacyUseBody:
+    'We use that information only to operate the product: retrieve or cache budget data, extract figures from documents you submit, answer questions about a report, and improve reliability. We do not sell your personal information and we do not use it for advertising.',
+  privacyAgentsTitle: 'Automation & providers',
+  privacyAgentsBody:
+    'Some steps are performed by automated agents and supporting infrastructure that may process content you submit or public URLs the service fetches on your behalf. Do not upload documents or type questions that contain sensitive personal data unless you accept that they will be handled by the service and its backends.',
+  privacyCookiesTitle: 'Cookies & local storage',
+  privacyCookiesBody:
+    'The site may use minimal browser storage or similar technologies needed for the app to function (for example preferences or session state). We do not run third-party advertising trackers on this experience.',
+  privacyRetentionTitle: 'Retention',
+  privacyRetentionBody:
+    'Extracted budget reports and related metadata may be kept in our cache so the ledger stays fast for everyone. Uploaded PDFs are processed to produce structured budget data; retention depends on how the deployment is operated. If you need data removed from a specific instance, contact whoever runs that deployment.',
+  privacyChildrenTitle: 'Children',
+  privacyChildrenBody:
+    'This tool is intended for a general audience curious about public finance. It is not directed at children under 13, and we do not knowingly collect information from them.',
+  privacyChangesTitle: 'Changes',
+  privacyChangesBody:
+    'We may update this notice as the product changes. The “Last updated” line at the top will change when we do.',
 
   sourcesNoSummary:
     'No editorial summary was extracted for this report. The citations and category mapping below are still authoritative.',
@@ -346,6 +374,34 @@ export const es: { [K in UIStringKey]: string } = {
   footerTransparencyTitle: 'Transparencia',
   footerTransparencyBody:
     'Cada cifra enlaza a una fuente citada. ¿No está de acuerdo con la clasificación? Es válido — es una herramienta periodística, no la contabilidad oficial.',
+  footerPrivacyLink: 'Política de privacidad',
+
+  privacyEyebrow: 'Legal',
+  privacyTitle: 'Política de privacidad',
+  privacyUpdated: 'Última actualización: 19 de abril de 2026',
+  privacyIntro:
+    'Budget Buckets le ayuda a explorar presupuestos municipales públicos. Esta página describe qué información puede procesar el servicio cuando lo usa y cómo entendemos la privacidad en términos sencillos. No es asesoría legal.',
+  privacyCollectTitle: 'Qué procesamos',
+  privacyCollectBody:
+    'Cuando busca una ciudad, sube PDF de presupuesto, ejecuta comparaciones, carga historial o hace una pregunta en el chat, su navegador envía a nuestros servidores los datos necesarios para esa acción (por ejemplo ciudad, estado, año fiscal, bytes del archivo en cargas y el texto de su pregunta). Los registros estándar del servidor y la red pueden incluir dirección IP, marcas de tiempo y metadatos de la solicitud. No le pedimos crear una cuenta para esta demo.',
+  privacyUseTitle: 'Cómo lo usamos',
+  privacyUseBody:
+    'Usamos esa información solo para operar el producto: obtener o poner en caché datos presupuestarios, extraer cifras de documentos que envía, responder preguntas sobre un informe y mejorar la confiabilidad. No vendemos su información personal ni la usamos para publicidad.',
+  privacyAgentsTitle: 'Automatización y proveedores',
+  privacyAgentsBody:
+    'Algunos pasos los realizan agentes automatizados e infraestructura de soporte que puede procesar el contenido que envía o URL públicas que el servicio obtiene en su nombre. No suba documentos ni escriba preguntas con datos personales sensibles a menos que acepte que el servicio y sus sistemas traseros los manejen.',
+  privacyCookiesTitle: 'Cookies y almacenamiento local',
+  privacyCookiesBody:
+    'El sitio puede usar almacenamiento mínimo del navegador o tecnologías similares necesarias para que la aplicación funcione (por ejemplo preferencias o estado de sesión). No ejecutamos rastreadores publicitarios de terceros en esta experiencia.',
+  privacyRetentionTitle: 'Conservación',
+  privacyRetentionBody:
+    'Los informes presupuestarios extraídos y metadatos relacionados pueden conservarse en nuestra caché para que el libro mayor sea rápido para todos. Los PDF subidos se procesan para producir datos estructurados; la conservación depende de cómo se opere el despliegue. Si necesita que se eliminen datos de una instancia concreta, contacte a quien opera ese despliegue.',
+  privacyChildrenTitle: 'Menores',
+  privacyChildrenBody:
+    'Esta herramienta está pensada para un público interesado en finanzas públicas. No está dirigida a menores de 13 años y no recopilamos información de ellos a sabiendas.',
+  privacyChangesTitle: 'Cambios',
+  privacyChangesBody:
+    'Podemos actualizar este aviso cuando el producto cambie. La línea de “Última actualización” arriba cambiará cuando lo hagamos.',
 
   sourcesNoSummary:
     'No se extrajo un resumen editorial para este informe. Las citas y el mapeo de categorías siguen siendo autoritativos.',
@@ -521,6 +577,34 @@ export const zh: { [K in UIStringKey]: string } = {
   footerTransparencyTitle: '透明',
   footerTransparencyBody:
     '每项数字均可追溯引用来源。若不同意类别划分也合理——这是新闻工具，并非法定账目。',
+  footerPrivacyLink: '隐私政策',
+
+  privacyEyebrow: '法律信息',
+  privacyTitle: '隐私政策',
+  privacyUpdated: '最近更新：2026 年 4 月 19 日',
+  privacyIntro:
+    'Budget Buckets 帮助您查阅公开的市政预算。本页说明您使用服务时我们可能处理哪些信息，以及我们以通俗方式对隐私的理解。本文不构成法律意见。',
+  privacyCollectTitle: '我们处理的信息',
+  privacyCollectBody:
+    '当您搜索城市、上传预算 PDF、运行对比、加载历史或在聊天中提问时，浏览器会将完成该操作所需的输入发送到我们的服务器（例如城市、州、财年、上传文件的二进制内容以及您的问题文本）。常规服务器与网络日志可能包含 IP 地址、时间戳和请求元数据。本演示不要求您注册账户。',
+  privacyUseTitle: '我们如何使用',
+  privacyUseBody:
+    '我们仅将上述信息用于运行产品：获取或缓存预算数据、从您提交的文件中提取数字、回答与某份报告相关的问题并提升可靠性。我们不出售您的个人信息，也不将其用于广告投放。',
+  privacyAgentsTitle: '自动化与提供方',
+  privacyAgentsBody:
+    '部分步骤由自动化智能体及配套基础设施完成，其可能会处理您提交的内容或代表您抓取的公开网址。请勿上传包含敏感个人数据的文档或输入此类问题，除非您接受服务及其后端会处理这些内容。',
+  privacyCookiesTitle: 'Cookie 与本地存储',
+  privacyCookiesBody:
+    '本站可能使用必要的浏览器存储或类似技术以保证应用运行（例如偏好或会话状态）。本体验不包含第三方广告追踪。',
+  privacyRetentionTitle: '保留期限',
+  privacyRetentionBody:
+    '为让账本对所有人保持快速响应，提取的预算报告及相关元数据可能会保留在缓存中。上传的 PDF 会经处理生成结构化预算数据；具体保留时间取决于部署方式。若需从某一实例删除数据，请联系该实例的运营方。',
+  privacyChildrenTitle: '儿童',
+  privacyChildrenBody:
+    '本工具面向对公共财政感兴趣的普通用户，并非面向 13 岁以下儿童，我们亦不会在知情情况下收集其信息。',
+  privacyChangesTitle: '变更',
+  privacyChangesBody:
+    '若产品发生变化，我们可能更新本说明。更新时，页顶的“最近更新”日期会随之变更。',
 
   sourcesNoSummary:
     '未提取该报告的编辑摘要。下方引用与类别划分仍具参考价值。',

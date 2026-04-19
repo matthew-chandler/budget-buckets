@@ -20,7 +20,11 @@ import {
   scrapeBudgetWithPi,
   translateReportPayloadWithPi,
 } from './pi.js'
-import { applyReportTranslationPayload, type ReportTranslationPayload } from './report-translation.js'
+import {
+  applyReportTranslationPayload,
+  REPORT_TRANSLATION_PROMPT_REV,
+  type ReportTranslationPayload,
+} from './report-translation.js'
 import type {
   BudgetReport,
   BucketAllocation,
@@ -352,13 +356,13 @@ export async function getLocalizedBudgetReport(
     return canonical
   }
 
-  const cached = getReportTranslationJson(reportId, locale)
+  const cached = getReportTranslationJson(reportId, locale, REPORT_TRANSLATION_PROMPT_REV)
   let payload: ReportTranslationPayload
   if (cached) {
     payload = JSON.parse(cached) as ReportTranslationPayload
   } else {
     payload = await translateReportPayloadWithPi(canonical, locale)
-    upsertReportTranslation(reportId, locale, JSON.stringify(payload))
+    upsertReportTranslation(reportId, locale, JSON.stringify(payload), REPORT_TRANSLATION_PROMPT_REV)
   }
   return applyReportTranslationPayload(canonical, payload)
 }
@@ -370,9 +374,9 @@ export function queueReportTranslations(reportId: string): void {
       if (!base) return
       const canonical = toClientReport(base)
       for (const loc of ['es', 'zh'] as const) {
-        if (getReportTranslationJson(reportId, loc)) continue
+        if (getReportTranslationJson(reportId, loc, REPORT_TRANSLATION_PROMPT_REV)) continue
         const payload = await translateReportPayloadWithPi(canonical, loc)
-        upsertReportTranslation(reportId, loc, JSON.stringify(payload))
+        upsertReportTranslation(reportId, loc, JSON.stringify(payload), REPORT_TRANSLATION_PROMPT_REV)
       }
     } catch (err) {
       console.error('[queueReportTranslations]', reportId, err)

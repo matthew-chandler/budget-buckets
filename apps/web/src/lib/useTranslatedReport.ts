@@ -48,13 +48,26 @@ export function useTranslatedReport(report: BudgetReport | null) {
     retryDelay: (i) => Math.min(1500 * 2 ** i, 8000),
   })
 
+  /** Ignore cached rows that belong to a different ledger (fast locale/report switches). */
+  const localizedMatchesLedger = Boolean(
+    query.data &&
+      report &&
+      query.data.id === report.id &&
+      query.data.updatedAt === report.updatedAt &&
+      query.data.fiscalYearLabel === report.fiscalYearLabel,
+  )
+
   const displayReport: BudgetReport | null = !report
     ? null
     : !targetLocale
       ? report
-      : (query.data ?? report)
+      : localizedMatchesLedger
+        ? query.data!
+        : report
 
-  const isTranslating = Boolean(targetLocale && report && query.isFetching)
+  const isTranslating = Boolean(
+    targetLocale && report && !localizedMatchesLedger && (query.isPending || query.isFetching),
+  )
 
   return {
     displayReport,

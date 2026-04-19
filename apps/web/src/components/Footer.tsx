@@ -8,6 +8,9 @@ export function Footer() {
       <div className="footer__col">
         <div className="footer__mark">{t('footerMark')}</div>
         <p>{t('footerCol1')}</p>
+        <p className="footer__legal">
+          <a href="#privacy">{t('footerPrivacyLink')}</a>
+        </p>
       </div>
       <div className="footer__col">
         <h4>{t('footerHowTitle')}</h4>

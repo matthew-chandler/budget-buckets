@@ -21,6 +21,7 @@ import {
   buildReportTranslationPayload,
   type ReportTranslationPayload,
 } from './report-translation.js'
+import { normalizeBucketKey } from './buckets.js'
 import type { BudgetReport, ChatResponse, Citation, ScrapedBudgetPayload } from './types.js'
 import { extractJsonObject } from './utils.js'
 
@@ -70,19 +71,38 @@ Hard rules:
 `.trim()
 
 const CHAT_SYSTEM_PROMPT = `
-You answer questions about one city's budget using only the provided structured budget record and citations.
+You are Budget Buckets' ledger Q&A agent.
+
+You receive a structured budget JSON record for one city and a user question.
+
+You have the read_document tool.
+- Call read_document on an allowed URL when the question needs detail beyond the JSON (exact figures, narrative, footnotes, or tables in the official source).
+- Pass the exact URL string from the "Allowed read_document URLs" list in the user message. Do not pass any URL that is not in that list.
+- If that list is empty, or the only sources are non-http (e.g. user-upload), answer from the JSON only — do not call read_document.
 
 Rules:
-- Do not invent facts beyond the provided record.
-- If the answer is uncertain or the data is missing, say so plainly.
-- Keep answers concise and specific.
-- When helpful, mention relevant source titles or URLs from the provided citations.
+- Do not invent budget numbers or facts not grounded in the JSON or in text returned by read_document.
+- If data is missing or uncertain, say so plainly.
+- Be concise and specific.
+
+Language (critical):
+- Follow the OUTPUT LANGUAGE block at the end of this system prompt for every natural-language string you produce.
+- The budget JSON may be in English or already localized. Either way, the "answer" and every citation "title" and "note" must be written only in that output language.
+- Do not paste long English paragraphs from the JSON or from read_document; paraphrase and summarize in the output language. Keep proper nouns (city names, document titles) only when there is no conventional translation.
+
+Your FINAL assistant message must be ONLY a JSON object (no surrounding markdown, no commentary):
+{"answer":"string","citations":[{"title":"string","url":"string","note":null,"appliesToBucketKey":null}]}
+
+- "answer" is plain text; you may wrap short phrases in **double asterisks** for emphasis.
+- "citations" must list every source you relied on. Each "url" must match exactly one entry from "Allowed citation URLs" in the user message (including user-upload when that is the ledger link).
+- Optional "note" can name a section, table, or page when helpful.
+- "appliesToBucketKey" may be null or one of the standard bucket keys when relevant.
 `.trim()
 
 const CHAT_OUTPUT_LANGUAGE: Record<'en' | 'es' | 'zh', string> = {
-  en: 'Write your entire answer in English.',
-  es: 'Escribe toda tu respuesta en español.',
-  zh: '请用简体中文撰写完整回答。',
+  en: 'OUTPUT LANGUAGE: English. Write the entire "answer" and all citation titles/notes in English only.',
+  es: 'OUTPUT LANGUAGE: Spanish. Escribe el campo "answer" completo y todos los "title" y "note" de las citas solo en español. No dejes párrafos explicativos en inglés.',
+  zh: 'OUTPUT LANGUAGE: 简体中文。将 "answer" 全文以及每条引用的 "title"、"note" 全部写成简体中文；不要保留大段英文说明。可对 JSON 或文档中的英文内容进行意译，不要整段照搬。',
 }
 
 const TRANSLATE_TARGET_LABEL: Record<'es' | 'zh', string> = {
@@ -101,6 +121,12 @@ Rules:
 - Each bucket object has a "key" field (e.g. public-safety-justice). Copy those key strings EXACTLY — same spelling and hyphens. Never translate or rename bucket keys.
 - Do not add or remove array entries. Keep the same number of buckets, rawCategories, and citations as in the input.
 - Translate summaries, notes, citation titles, source titles, source notes, category names, and bucket summaries.
+
+Full coverage (critical):
+- buckets[].summary and every string in buckets[].rawCategories[] must be fully translated. Do not leave English sentences or phrases inside those fields.
+- The same applies to rawCategories[].name and rawCategories[].note, top-level summary, sourceTitle, sourceNotes, buckets[].citationTitle, and citations[].title / citations[].note.
+- Do not produce mixed bilingual text (for example a Chinese fragment followed by the original English paragraph). Rewrite the whole string in the target language.
+- For Chinese (zh), use simplified characters consistently for all translated prose.
 `.trim()
 
 async function translateReportPayloadAttempt(
@@ -130,7 +156,7 @@ async function translateReportPayloadAttempt(
     await session.prompt(
       [
         `Target language: ${target} (${language}).`,
-        'Translate the string fields in this JSON. Output the same JSON shape only:',
+        'Translate every natural-language string in this JSON into that language only. Output the same JSON shape only — no English leftovers in buckets[].summary, buckets[].rawCategories, or rawCategories[].',
         JSON.stringify(payload, null, 2),
       ].join('\n\n'),
       { expandPromptTemplates: false },
@@ -809,18 +835,157 @@ Do not spend time exploring the environment. Do not run setup or discovery comma
   }
 }
 
-export async function answerBudgetQuestion(
+const CHAT_ANSWER_RETRY = `
+Return ONLY valid JSON. Your previous reply was not parseable. Use this exact shape and nothing else:
+{"answer":"...","citations":[{"title":"...","url":"...","note":null,"appliesToBucketKey":null}]}
+`.trim()
+
+function normalizeCitationUrlKey(url: string): string {
+  return url.trim().toLowerCase().replace(/\/$/, '')
+}
+
+function collectAllowedCitationUrls(report: BudgetReport): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  const push = (u: string | null | undefined) => {
+    if (!u?.trim()) return
+    const t = u.trim()
+    const k = normalizeCitationUrlKey(t)
+    if (seen.has(k)) return
+    seen.add(k)
+    out.push(t)
+  }
+  push(report.sourceUrl)
+  for (const c of report.citations) {
+    push(c.url)
+  }
+  for (const b of report.buckets) {
+    push(b.citationUrl)
+  }
+  return out
+}
+
+function buildAllowedCitationUrlSet(report: BudgetReport): Set<string> {
+  return new Set(collectAllowedCitationUrls(report).map(normalizeCitationUrlKey))
+}
+
+function isCitationUrlAllowed(url: string, allowed: Set<string>): boolean {
+  return allowed.has(normalizeCitationUrlKey(url.trim()))
+}
+
+interface ChatAnswerPayload {
+  answer: string
+  citations: Array<{
+    title?: string
+    url?: string
+    note?: string | null
+    appliesToBucketKey?: string | null
+  }>
+}
+
+function sanitizeChatCitations(raw: unknown, allowed: Set<string>): Citation[] {
+  if (!Array.isArray(raw)) {
+    return []
+  }
+
+  const out: Citation[] = []
+  const seen = new Set<string>()
+
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue
+    const rec = item as Record<string, unknown>
+    const url = typeof rec.url === 'string' ? rec.url.trim() : ''
+    if (!url || !isCitationUrlAllowed(url, allowed)) continue
+
+    const key = normalizeCitationUrlKey(url)
+    if (seen.has(key)) continue
+    seen.add(key)
+
+    const title = typeof rec.title === 'string' ? rec.title.trim() : ''
+    const note = rec.note != null && typeof rec.note === 'string' ? rec.note.trim() : null
+    const applies = normalizeBucketKey(
+      typeof rec.appliesToBucketKey === 'string' ? rec.appliesToBucketKey : null,
+    )
+
+    out.push({
+      title: title || url,
+      url,
+      note: note || null,
+      appliesToBucketKey: applies,
+    })
+  }
+
+  return out
+}
+
+function parseChatAnswerPayload(text: string): ChatAnswerPayload {
+  const parsed = extractJsonObject<ChatAnswerPayload>(text)
+  if (typeof parsed.answer !== 'string' || !parsed.answer.trim()) {
+    throw new Error('Chat answer JSON missing a non-empty "answer" string.')
+  }
+  if (!Array.isArray(parsed.citations)) {
+    throw new Error('Chat answer JSON missing a "citations" array.')
+  }
+  return parsed
+}
+
+function buildChatUserPrompt(
   report: BudgetReport,
   question: string,
-  language: 'en' | 'es' | 'zh' = 'en',
+  language: 'en' | 'es' | 'zh',
+): string {
+  const allowedList = collectAllowedCitationUrls(report)
+  const readUrls = allowedList.filter((u) => /^https?:\/\//i.test(u))
+
+  const readDocumentBlock =
+    readUrls.length === 0
+      ? '(none — no http(s) URLs on this ledger; answer from the JSON only.)'
+      : readUrls.map((u, i) => `${i + 1}. ${u}`).join('\n')
+
+  const citationBlock =
+    allowedList.length === 0
+      ? '(none — cite using the structured source fields in the JSON if needed.)'
+      : allowedList.map((u, i) => `${i + 1}. ${u}`).join('\n')
+
+  const lines = [
+    'Structured budget record (JSON):',
+    JSON.stringify(report, null, 2),
+    '',
+    'Allowed read_document URLs (only these; pass the exact string to read_document):',
+    readDocumentBlock,
+    '',
+    'Allowed citation URLs (each "citations[].url" in your JSON must match one of these exactly):',
+    citationBlock,
+    '',
+    `Question: ${question}`,
+  ]
+
+  if (language !== 'en') {
+    const label = TRANSLATE_TARGET_LABEL[language]
+    lines.push(
+      '',
+      `Reminder: respond with JSON only. All user-visible prose in "answer" and in citation "title"/"note" must be ${label} (${language}) — never English.`,
+    )
+  }
+
+  return lines.join('\n')
+}
+
+async function runBudgetChatSession(
+  report: BudgetReport,
+  question: string,
+  language: 'en' | 'es' | 'zh',
+  retryHint?: string,
 ): Promise<ChatResponse> {
   const cwd = await mkdtemp(join(tmpdir(), 'budget-buckets-chat-'))
   let agentDir: string | null = null
+  const allowedUrlSet = buildAllowedCitationUrlSet(report)
 
   try {
     const result = await createFireworksAgentSession({
       cwd,
       tools: [],
+      customTools: [readDocumentTool],
     })
     agentDir = result.agentDir
     const { session, modelFallbackMessage } = result
@@ -830,25 +995,48 @@ export async function answerBudgetQuestion(
     }
 
     session.agent.state.systemPrompt = `${CHAT_SYSTEM_PROMPT}\n\n${CHAT_OUTPUT_LANGUAGE[language]}`
+    attachSessionLogging(session, `chat:${report.city},${report.state}`)
 
     await session.prompt(
       [
-        'Budget record:',
-        JSON.stringify(report, null, 2),
-        '',
-        `Question: ${question}`,
-      ].join('\n'),
+        buildChatUserPrompt(report, question, language),
+        retryHint ? `\n\n${retryHint}` : '',
+      ].join(''),
       { expandPromptTemplates: false },
     )
 
+    const text = session.getLastAssistantText()
+    if (!text?.trim()) {
+      throw new Error('The chat agent did not return any text.')
+    }
+
+    const parsed = parseChatAnswerPayload(text)
+    const citations = sanitizeChatCitations(parsed.citations, allowedUrlSet)
+
     return {
-      answer: session.getLastAssistantText() ?? 'No answer returned.',
-      citations: report.citations as Citation[],
+      answer: parsed.answer.trim(),
+      citations,
     }
   } finally {
     await rm(cwd, { recursive: true, force: true })
     if (agentDir) {
       await rm(agentDir, { recursive: true, force: true })
     }
+  }
+}
+
+export async function answerBudgetQuestion(
+  report: BudgetReport,
+  question: string,
+  language: 'en' | 'es' | 'zh' = 'en',
+): Promise<ChatResponse> {
+  try {
+    return await runBudgetChatSession(report, question, language)
+  } catch (first) {
+    if (DEBUG_PI) {
+      console.error('[answerBudgetQuestion] first attempt failed, retrying once:', first)
+    }
+    await new Promise((r) => setTimeout(r, 900))
+    return await runBudgetChatSession(report, question, language, CHAT_ANSWER_RETRY)
   }
 }

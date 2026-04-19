@@ -94,6 +94,17 @@ db.exec(`
     ON report_translations(report_id);
 `)
 
+{
+  const cols = db
+    .prepare(`PRAGMA table_info(report_translations)`)
+    .all() as Array<{ name: string }>
+  if (!cols.some((c) => c.name === 'prompt_rev')) {
+    db.exec(
+      `ALTER TABLE report_translations ADD COLUMN prompt_rev INTEGER NOT NULL DEFAULT 1`,
+    )
+  }
+}
+
 function rowToReport(row: ReportRow): PersistedBudgetReport {
   return {
     id: row.id,
@@ -262,34 +273,39 @@ export function deleteReportTranslationsForReport(reportId: string): void {
 export function getReportTranslationJson(
   reportId: string,
   locale: 'es' | 'zh',
+  minPromptRev: number,
 ): string | null {
   const row = db
     .prepare(
       `
-    SELECT payload_json FROM report_translations
+    SELECT payload_json, prompt_rev FROM report_translations
     WHERE report_id = ? AND locale = ?
   `,
     )
-    .get(reportId, locale) as { payload_json: string } | undefined
+    .get(reportId, locale) as { payload_json: string; prompt_rev: number } | undefined
 
-  return row?.payload_json ?? null
+  if (!row) return null
+  if (row.prompt_rev < minPromptRev) return null
+  return row.payload_json
 }
 
 export function upsertReportTranslation(
   reportId: string,
   locale: 'es' | 'zh',
   payloadJson: string,
+  promptRev: number,
 ): void {
   const now = new Date().toISOString()
   db.prepare(
     `
-    INSERT INTO report_translations (report_id, locale, payload_json, updated_at)
-    VALUES (@reportId, @locale, @payloadJson, @updatedAt)
+    INSERT INTO report_translations (report_id, locale, payload_json, updated_at, prompt_rev)
+    VALUES (@reportId, @locale, @payloadJson, @updatedAt, @promptRev)
     ON CONFLICT(report_id, locale) DO UPDATE SET
       payload_json = excluded.payload_json,
-      updated_at = excluded.updated_at
+      updated_at = excluded.updated_at,
+      prompt_rev = excluded.prompt_rev
   `,
-  ).run({ reportId, locale, payloadJson, updatedAt: now })
+  ).run({ reportId, locale, payloadJson, updatedAt: now, promptRev })
 }
 
 export async function listBudgetReportsForCity(

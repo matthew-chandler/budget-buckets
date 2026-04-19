@@ -110,19 +110,21 @@ export function ChatPanel({
               <p className="chat-answer__text">{formatChatAnswerToNodes(data.answer)}</p>
               {data.citations.length ? (
                 <div className="chat-answer__attribution">
-                  {t('chatCitedSources')}{' '}
-                  {data.citations.slice(0, 4).map((c, i) => (
-                    <span key={`${c.url}-${c.title}`}>
-                      {i > 0 ? ' · ' : ''}
-                      {isHttpUrl(c.url) ? (
-                        <a href={c.url} target="_blank" rel="noreferrer">
-                          {c.title}
-                        </a>
-                      ) : (
-                        c.title
-                      )}
-                    </span>
-                  ))}
+                  <p className="chat-citation-heading">{t('chatCitedSources')}</p>
+                  <ul className="chat-citation-list">
+                    {data.citations.map((c) => (
+                      <li key={`${c.url}-${c.title}`}>
+                        {isHttpUrl(c.url) ? (
+                          <a href={c.url} target="_blank" rel="noreferrer">
+                            {c.title}
+                          </a>
+                        ) : (
+                          <span>{c.title}</span>
+                        )}
+                        {c.note ? <span className="chat-citation-note"> — {c.note}</span> : null}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               ) : null}
             </div>

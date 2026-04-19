@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PdfUploadEntry } from './lib/types'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useI18n } from './i18n/I18nProvider'
@@ -23,6 +23,7 @@ import { Comparison } from './components/Comparison'
 import { HistorySection } from './components/HistorySection'
 import { ChatPanel } from './components/ChatPanel'
 import { Footer } from './components/Footer'
+import { PrivacySection } from './components/PrivacySection'
 
 const REQ_TIMEOUT_MS = 120_000
 const CHAT_TIMEOUT_MS = 90_000
@@ -97,10 +98,10 @@ export default function App() {
     if (activeReport?.id) setDonutDenominator('adopted')
   }, [activeReport?.id])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (prevLocaleRef.current === locale) return
     prevLocaleRef.current = locale
-    queryClient.resetQueries({ queryKey: ['report-translation'] })
+    void queryClient.resetQueries({ queryKey: ['report-translation'] })
   }, [locale, queryClient])
 
   const {
@@ -356,6 +357,18 @@ export default function App() {
     },
   })
 
+  const chatMutationRef = useRef(chatMutation)
+  const compareMutationRef = useRef(compareMutation)
+  chatMutationRef.current = chatMutation
+  compareMutationRef.current = compareMutation
+
+  useEffect(() => {
+    chatAbortRef.current?.abort()
+    chatMutationRef.current.reset()
+    compareAbortRef.current?.abort()
+    compareMutationRef.current.reset()
+  }, [activeReport?.id, locale])
+
   const cancelChat = () => {
     chatAbortRef.current?.abort()
     chatMutation.reset()
@@ -476,6 +489,7 @@ export default function App() {
           </>
         ) : null}
 
+        <PrivacySection />
         <Footer />
       </main>
     </>

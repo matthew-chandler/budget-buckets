@@ -1,6 +1,12 @@
 import type { BucketKey } from './buckets.js'
 import type { BudgetReport } from './types.js'
 
+/**
+ * Increment when server-side translation instructions change materially so cached
+ * `report_translations` rows are treated as stale and regenerated.
+ */
+export const REPORT_TRANSLATION_PROMPT_REV = 2
+
 /** String fields produced by the translation model; merged onto the canonical English report. */
 export interface ReportTranslationPayload {
   summary: string | null
