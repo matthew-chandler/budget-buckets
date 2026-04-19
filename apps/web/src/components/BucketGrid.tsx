@@ -1,5 +1,5 @@
 import type { BucketAllocation } from '../lib/types'
-import { formatCurrency, formatPercent } from '../lib/format'
+import { cssVars, formatCurrency, formatPercent } from '../lib/format'
 
 interface BucketGridProps {
   buckets: BucketAllocation[]
@@ -14,11 +14,7 @@ export function BucketGrid({ buckets }: BucketGridProps) {
           <article
             key={bucket.key}
             className={`bucket-card ${isEmpty ? 'is-empty' : ''}`}
-            style={
-              {
-                '--bucket-color': bucket.color,
-              } as React.CSSProperties
-            }
+            style={cssVars({ bucketColor: bucket.color })}
           >
             <div className="bucket-card__head">
               <span className="bucket-card__key">

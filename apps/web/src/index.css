@@ -1,5 +1,36 @@
 /* =========================================================
    Budget Buckets — editorial civic-journalism design system
+
+   Sections (search these headers to navigate):
+     · Tokens & base              — :root, body, typography, utilities
+     · Page shell                 — .page, .section, .section-heading
+     · Masthead                   — sticky top bar
+     · Frontpage                  — hero + search cards
+     · Buttons & fields           — .btn, .field, inputs
+     · Dossier                    — city header + stats strip
+     · Donut chart                — .donut-*
+     · Bucket grid                — .bucket-*
+     · Sources / citations        — .sources, .citations-list
+     · Comparison                 — .compare-*
+     · History                    — .history-*
+     · Chat                       — .chat-*
+     · Alert / errors             — .alert
+     · Archive                    — cached cities index
+     · Footer                     — bottom broadsheet
+     · Loading states             — .skeleton, .spinner
+     · Animations                 — keyframes + .fade-in helpers
+     · A11y                       — :focus-visible + reduced motion
+     · Responsive                 — @media breakpoints
+
+   Conventions:
+     · Class names are flat (.bucket-card, .archive-row). Nested
+       element/modifier follow BEM-ish: __element / .is-state.
+     · All design tokens live on :root. Prefer var(--ink-60)
+       over opaque hex for text opacity variants.
+     · Numeric/tabular data uses .num or font-family: var(--mono)
+       with font-variant-numeric: tabular-nums.
+     · Per-instance colors pass through the --bucket-color custom
+       property (set via cssVars() helper in lib/format.ts).
    ========================================================= */
 
 :root {
@@ -1874,6 +1905,47 @@ textarea.field-textarea:focus {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* =========================================================
+   A11y — focus visibility + reduced motion
+   ========================================================= */
+
+/* Remove the default browser focus ring, then reintroduce it
+   consistently on keyboard navigation only. */
+:focus {
+  outline: none;
+}
+
+.btn:focus-visible,
+.chat-chip:focus-visible,
+.archive-row:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.field input:focus-visible,
+textarea.field-textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.donut-slice:focus-visible {
+  stroke: var(--ink);
+  stroke-width: 2;
+}
+
+/* Respect the user's OS-level motion preference. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* =========================================================

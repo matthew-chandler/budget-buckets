@@ -1,6 +1,7 @@
 import { type FormEvent } from 'react'
 import type { BudgetReport, ChatResponse } from '../lib/types'
 import { isHttpUrl } from '../lib/api'
+import { SectionHeading } from './SectionHeading'
 
 const SUGGESTIONS = [
   'What stands out most about this budget?',
@@ -35,13 +36,7 @@ export function ChatPanel({
 
   return (
     <section className="section">
-      <div className="section-heading">
-        <div className="section-heading__num">05</div>
-        <div className="section-heading__title">
-          <p className="eyebrow">Q &amp; A with the Agent</p>
-          <h2>Ask the ledger</h2>
-        </div>
-      </div>
+      <SectionHeading num="05" eyebrow="Q & A with the Agent" title="Ask the ledger" />
 
       <div className="chat-shell">
         <form className="chat-form" onSubmit={handleSubmit}>

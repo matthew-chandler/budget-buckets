@@ -3,6 +3,7 @@ import { formatCurrency, formatNumber, perCapita } from '../lib/format'
 import { BucketDonut } from './BucketDonut'
 import { BucketGrid } from './BucketGrid'
 import { SourcesBlock } from './SourcesBlock'
+import { SectionHeading } from './SectionHeading'
 
 interface DossierProps {
   report: BudgetReport
@@ -101,12 +102,8 @@ export function Dossier({ report, fromCache }: DossierProps) {
 
       <SourcesBlock report={report} fromCache={fromCache} />
 
-      <div className="section-heading" style={{ marginTop: 32 }}>
-        <div className="section-heading__num">02</div>
-        <div className="section-heading__title">
-          <p className="eyebrow">Bucket Detail</p>
-          <h2>What every bucket holds</h2>
-        </div>
+      <div style={{ marginTop: 32 }}>
+        <SectionHeading num="02" eyebrow="Bucket Detail" title="What every bucket holds" />
       </div>
 
       <BucketGrid buckets={report.buckets} />

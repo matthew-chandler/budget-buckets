@@ -1,6 +1,7 @@
 import { type FormEvent } from 'react'
 import type { BudgetReport, HistoryResponse } from '../lib/types'
 import { formatCurrency, formatPercent } from '../lib/format'
+import { SectionHeading } from './SectionHeading'
 
 interface HistorySectionProps {
   activeReport: BudgetReport
@@ -27,13 +28,11 @@ export function HistorySection({
 
   return (
     <section className="section">
-      <div className="section-heading">
-        <div className="section-heading__num">04</div>
-        <div className="section-heading__title">
-          <p className="eyebrow">Across Time</p>
-          <h2>How the total has moved, year over year</h2>
-        </div>
-      </div>
+      <SectionHeading
+        num="04"
+        eyebrow="Across Time"
+        title="How the total has moved, year over year"
+      />
 
       <div className="history-shell">
         <HistoryLineChart reports={reports} />

@@ -1,5 +1,6 @@
 import type { SearchResult } from '../lib/types'
 import { formatDate } from '../lib/format'
+import { SectionHeading } from './SectionHeading'
 
 interface ArchiveProps {
   results: SearchResult[]
@@ -24,13 +25,7 @@ export function Archive({
 }: ArchiveProps) {
   return (
     <section className="section archive fade-in">
-      <div className="section-heading">
-        <div className="section-heading__num">00</div>
-        <div className="section-heading__title">
-          <p className="eyebrow">The Archive</p>
-          <h2>Cities already on file</h2>
-        </div>
-      </div>
+      <SectionHeading num="00" eyebrow="The Archive" title="Cities already on file" />
 
       <div className="archive__lede">
         Pick up any city we've already indexed &mdash; no wait, no live scrape.

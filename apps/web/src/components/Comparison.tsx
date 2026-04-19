@@ -1,6 +1,7 @@
 import { type FormEvent } from 'react'
 import type { BudgetReport, CompareResponse } from '../lib/types'
-import { formatCurrency, formatPercent } from '../lib/format'
+import { cssVars, formatCurrency, formatPercent } from '../lib/format'
+import { SectionHeading } from './SectionHeading'
 
 interface ComparisonProps {
   activeReport: BudgetReport
@@ -36,13 +37,7 @@ export function Comparison({
 
   return (
     <section className="section">
-      <div className="section-heading">
-        <div className="section-heading__num">03</div>
-        <div className="section-heading__title">
-          <p className="eyebrow">City vs City</p>
-          <h2>Line them up, side by side</h2>
-        </div>
-      </div>
+      <SectionHeading num="03" eyebrow="City vs City" title="Line them up, side by side" />
 
       <div className="compare-shell">
         <form className="compare-form" onSubmit={handleSubmit}>
@@ -144,7 +139,7 @@ function ComparisonTable({ data }: { data: CompareResponse }) {
             <div
               key={bucket.key}
               className="compare-row"
-              style={{ ['--bucket-color' as string]: bucket.color }}
+              style={cssVars({ bucketColor: bucket.color })}
             >
               <div className="compare-row__label">
                 <span className="compare-row__name">
