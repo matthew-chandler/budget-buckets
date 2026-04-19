@@ -93,12 +93,15 @@ interface ChatResponse {
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3001'
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const isFormData = typeof FormData !== 'undefined' && init?.body instanceof FormData
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
+    headers: isFormData
+      ? { ...(init?.headers ?? {}) }
+      : {
+          'Content-Type': 'application/json',
+          ...(init?.headers ?? {}),
+        },
   })
 
   const data = (await response.json()) as T & { error?: string }
@@ -108,6 +111,10 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return data
+}
+
+function isHttpUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url.trim())
 }
 
 function formatCurrency(amount: number | null, compact = false): string {
@@ -314,11 +321,22 @@ function ComparisonTable({
 }
 
 function ReportSummary({ report, fromCache }: { report: BudgetReport; fromCache?: boolean }) {
+  const fromPdfUpload =
+    !fromCache &&
+    !report.sourceUrl &&
+    Boolean(report.sourceNotes?.toLowerCase().includes('upload'))
+
+  const statusLabel = fromCache
+    ? 'Loaded from database'
+    : fromPdfUpload
+      ? 'Analyzed from your PDF'
+      : 'Freshly scraped'
+
   return (
     <section className="panel report-panel">
       <div className="panel-header">
         <div>
-          <p className="eyebrow">{fromCache ? 'Loaded from database' : 'Freshly scraped'}</p>
+          <p className="eyebrow">{statusLabel}</p>
           <h2>{report.displayName}</h2>
           <p className="subhead">{report.fiscalYearLabel}</p>
         </div>
@@ -363,9 +381,13 @@ function ReportSummary({ report, fromCache }: { report: BudgetReport; fromCache?
             {report.citations.length ? (
               report.citations.map((citation) => (
                 <li key={`${citation.url}-${citation.title}`}>
-                  <a href={citation.url} target="_blank" rel="noreferrer">
-                    {citation.title}
-                  </a>
+                  {isHttpUrl(citation.url) ? (
+                    <a href={citation.url} target="_blank" rel="noreferrer">
+                      {citation.title}
+                    </a>
+                  ) : (
+                    <span>{citation.title}</span>
+                  )}
                   {citation.note ? <span>{citation.note}</span> : null}
                 </li>
               ))
@@ -383,6 +405,7 @@ function App() {
   const [city, setCity] = useState('Los Angeles')
   const [state, setState] = useState('CA')
   const [fiscalYear, setFiscalYear] = useState('')
+  const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [activeReport, setActiveReport] = useState<BudgetReport | null>(null)
   const [activeFromCache, setActiveFromCache] = useState(false)
   const [compareCity, setCompareCity] = useState('San Diego')
@@ -413,6 +436,32 @@ function App() {
         method: 'POST',
         body: JSON.stringify(payload),
       }),
+    onSuccess: (data) => {
+      setActiveReport(data.report)
+      setActiveFromCache(data.fromCache)
+    },
+  })
+
+  const uploadPdfMutation = useMutation({
+    mutationFn: () => {
+      if (!pdfFile) {
+        throw new Error('Choose a PDF file first.')
+      }
+
+      const formData = new FormData()
+      formData.append('city', city)
+      formData.append('state', state)
+      if (fiscalYear.trim()) {
+        formData.append('fiscalYear', fiscalYear.trim())
+      }
+
+      formData.append('file', pdfFile)
+
+      return apiFetch<ResolveResponse>('/api/reports/upload-pdf', {
+        method: 'POST',
+        body: formData,
+      })
+    },
     onSuccess: (data) => {
       setActiveReport(data.report)
       setActiveFromCache(data.fromCache)
@@ -477,10 +526,12 @@ function App() {
           <p className="hero-text">
             Search a U.S. city and Budget Buckets will reuse cached budget data when it exists.
             Otherwise it runs a live Pi + agent-browser scrape, stores the result, and shows the
-            spending in standardized civic buckets.
+            spending in standardized civic buckets. You can also upload an official city budget PDF
+            to have the agent read it directly—no web scrape required.
           </p>
         </div>
 
+        <div className="hero-forms-stack">
         <form
           className="hero-form panel"
           onSubmit={(event) => {
@@ -516,12 +567,48 @@ function App() {
             adopted budget.
           </p>
         </form>
+
+        <form
+          className="hero-form panel upload-panel"
+          onSubmit={(event) => {
+            event.preventDefault()
+            uploadPdfMutation.mutate()
+          }}
+        >
+          <p className="upload-heading">Or upload a city budget PDF</p>
+          <p className="form-note">
+            Uses the same city, state, and optional fiscal year above. The agent extracts text from
+            your PDF and maps figures into the standard buckets (max 25&nbsp;MB).
+          </p>
+          <label className="file-input-label">
+            Budget PDF
+            <input
+              type="file"
+              accept="application/pdf,.pdf"
+              onChange={(event) => {
+                const next = event.target.files?.[0] ?? null
+                setPdfFile(next)
+              }}
+            />
+          </label>
+          <button type="submit" disabled={uploadPdfMutation.isPending || !pdfFile}>
+            {uploadPdfMutation.isPending ? 'Analyzing PDF…' : 'Analyze uploaded PDF'}
+          </button>
+        </form>
+        </div>
       </section>
 
       {resolveMutation.error ? (
         <section className="panel error-panel">
           <strong>Could not load that budget.</strong>
           <p>{resolveMutation.error.message}</p>
+        </section>
+      ) : null}
+
+      {uploadPdfMutation.error ? (
+        <section className="panel error-panel">
+          <strong>Could not analyze that PDF.</strong>
+          <p>{uploadPdfMutation.error.message}</p>
         </section>
       ) : null}
 
@@ -685,9 +772,13 @@ function App() {
               <ul className="citation-list">
                 {chatMutation.data.citations.slice(0, 4).map((citation) => (
                   <li key={`${citation.url}-${citation.title}`}>
-                    <a href={citation.url} target="_blank" rel="noreferrer">
-                      {citation.title}
-                    </a>
+                    {isHttpUrl(citation.url) ? (
+                      <a href={citation.url} target="_blank" rel="noreferrer">
+                        {citation.title}
+                      </a>
+                    ) : (
+                      <span>{citation.title}</span>
+                    )}
                   </li>
                 ))}
               </ul>

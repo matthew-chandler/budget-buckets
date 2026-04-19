@@ -1,3 +1,6 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { basename, join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { bucketDefinitions, getBucketDefinition, normalizeBucketKey } from './buckets.js'
 import {
   getBudgetReportByCityYear,
@@ -6,7 +9,7 @@ import {
   searchCities,
   upsertBudgetReport,
 } from './db.js'
-import { answerBudgetQuestion, scrapeBudgetWithPi } from './pi.js'
+import { answerBudgetQuestion, scrapeBudgetFromUploadedPdfWithPi, scrapeBudgetWithPi } from './pi.js'
 import type {
   BudgetReport,
   BucketAllocation,
@@ -235,6 +238,51 @@ export async function resolveBudgetReport(input: {
     report,
     bucketDefinitions,
     fromCache: false,
+  }
+}
+
+export async function resolveBudgetReportFromUploadedPdf(input: {
+  city: string
+  state: string
+  fiscalYear?: string | null
+  pdfBuffer: Buffer
+  fileName: string
+}): Promise<ResolveResponse> {
+  const city = normalizeCity(input.city)
+  const state = normalizeState(input.state)
+  const fiscalYear = input.fiscalYear?.trim() || null
+  const safeName = basename(input.fileName || 'budget.pdf').replace(/[^\w.\-]+/g, '_') || 'budget.pdf'
+  const dir = await mkdtemp(join(tmpdir(), 'budget-buckets-upload-'))
+  const pdfFileName = /\.pdf$/i.test(safeName) ? safeName : `${safeName}.pdf`
+  const pdfPath = join(dir, pdfFileName)
+
+  try {
+    await writeFile(pdfPath, input.pdfBuffer)
+
+    const scraped = await scrapeBudgetFromUploadedPdfWithPi({
+      city,
+      state,
+      fiscalYearLabel: fiscalYear,
+      pdfPath,
+      fileName: pdfFileName,
+    })
+
+    const normalized = normalizeScrapedReport({
+      requestedCity: city,
+      requestedState: state,
+      requestedFiscalYear: fiscalYear,
+      scraped,
+    })
+
+    const report = await upsertBudgetReport(normalized)
+
+    return {
+      report,
+      bucketDefinitions,
+      fromCache: false,
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true })
   }
 }
 

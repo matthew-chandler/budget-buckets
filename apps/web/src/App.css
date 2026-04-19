@@ -17,6 +17,34 @@
   align-items: stretch;
 }
 
+.hero-forms-stack {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+
+.upload-heading {
+  margin: 0;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.upload-panel .file-input-label {
+  display: grid;
+  gap: 6px;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.upload-panel input[type='file'] {
+  border: 1px dashed rgba(47, 53, 79, 0.2);
+  border-radius: 16px;
+  padding: 12px 14px;
+  font: inherit;
+  background: rgba(255, 255, 255, 0.65);
+  color: var(--ink);
+}
+
 .hero-copy {
   padding: 28px 12px 28px 4px;
 }

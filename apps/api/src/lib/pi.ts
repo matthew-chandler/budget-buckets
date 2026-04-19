@@ -23,6 +23,23 @@ const FIREWORKS_PROVIDER = 'fireworks-router'
 const FIREWORKS_MODEL_ID = 'accounts/fireworks/routers/kimi-k2p5-turbo'
 const DEBUG_PI = process.env.BUDGET_BUCKETS_DEBUG_PI === '1'
 
+const PDF_UPLOAD_SYSTEM_PROMPT = `
+You are Budget Buckets' municipal budget analysis agent.
+
+Your job:
+1. Call the read_document tool exactly once on the absolute PDF file path provided in the user message.
+2. Use only that extracted text to bucket spending into the standardized buckets below.
+
+Hard rules:
+- Use read_document only on the path given in the user message. Do not browse the web or use any other source.
+- Do not inspect the environment, list directories, or run shell commands.
+- Never invent a number, citation, or category. Missing fields must be null or [].
+- Return JSON only. No markdown, no explanation, no code fences.
+- For citations tied to the uploaded PDF, set "url" to "user-upload" and describe the page, table, or section in "title" and "note".
+
+Stop once read_document has run and you can produce the JSON.
+`.trim()
+
 const SCRAPER_SYSTEM_PROMPT = `
 You are Budget Buckets' municipal budget scraping agent.
 
@@ -320,6 +337,112 @@ async function createFireworksAgentSession(input: {
   return {
     ...result,
     agentDir,
+  }
+}
+
+export async function scrapeBudgetFromUploadedPdfWithPi(input: {
+  city: string
+  state: string
+  fiscalYearLabel?: string | null
+  pdfPath: string
+  fileName: string
+}): Promise<ScrapedBudgetPayload> {
+  const cwd = await mkdtemp(join(tmpdir(), 'budget-buckets-pdf-'))
+  let agentDir: string | null = null
+
+  try {
+    const result = await createFireworksAgentSession({
+      cwd,
+      tools: [],
+      customTools: [readDocumentTool],
+    })
+    agentDir = result.agentDir
+    const { session, modelFallbackMessage } = result
+
+    if (!session.model) {
+      throw new Error(modelFallbackMessage ?? 'No Pi model is configured. Run `pi /login` or set an API key first.')
+    }
+
+    session.agent.state.systemPrompt = PDF_UPLOAD_SYSTEM_PROMPT
+    attachSessionLogging(session, `pdf:${input.city},${input.state}`)
+
+    const prompt = `
+Return this JSON shape exactly:
+{
+  "city": string | null,
+  "state": string | null,
+  "population": number | null,
+  "fiscalYear": string | null,
+  "currency": string | null,
+  "totalBudget": number | null,
+  "summary": string | null,
+  "source": { "title": string | null, "url": string | null, "notes": string | null } | null,
+  "buckets": [
+    {
+      "bucketKey": string | null,
+      "label": string | null,
+      "amount": number | null,
+      "summary": string | null,
+      "rawCategories": string[],
+      "citationUrl": string | null,
+      "citationTitle": string | null
+    }
+  ],
+  "rawCategories": [
+    {
+      "name": string,
+      "amount": number | null,
+      "bucketKey": string | null,
+      "note": string | null
+    }
+  ],
+  "citations": [
+    {
+      "title": string,
+      "url": string,
+      "note": string | null,
+      "appliesToBucketKey": string | null
+    }
+  ]
+}
+
+PDF file (call read_document on this absolute path only): ${input.pdfPath}
+Original filename: ${input.fileName}
+City and state for this budget: ${input.city}, ${input.state}
+Fiscal year: ${input.fiscalYearLabel?.trim() ? input.fiscalYearLabel.trim() : 'infer from the document text if possible, otherwise null'}
+
+Set source.title to the document or filename when known. Set source.url to null. Set source.notes to mention this came from a user-uploaded PDF.
+
+Bucket keys:
+- public-safety-justice
+- public-works-infrastructure
+- community-recreation
+- health-human-services
+- transportation
+- government-operations-administration
+- pensions-debt
+- economic-development
+- miscellaneous
+
+Required workflow:
+1. Call read_document once with source="${input.pdfPath}".
+2. Extract only supported figures from the returned text.
+3. Return only JSON.
+`.trim()
+
+    await session.prompt(prompt, { expandPromptTemplates: false })
+
+    const text = session.getLastAssistantText()
+    if (!text) {
+      throw new Error('The Pi PDF analysis session did not return any text.')
+    }
+
+    return extractJsonObject<ScrapedBudgetPayload>(text)
+  } finally {
+    await rm(cwd, { recursive: true, force: true })
+    if (agentDir) {
+      await rm(agentDir, { recursive: true, force: true })
+    }
   }
 }
 
